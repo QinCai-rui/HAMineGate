@@ -1,6 +1,7 @@
 --[[
   MIT LICENSE
   Copyright 2026 Raymont Qin
+  https://github.com/QinCai-rui/HAMineGate
   Permission is hereby granted, free of charge, to any person obtaining a copy
   of this software and associated documentation files (the "Software"), to deal
   in the Software without restriction, including without limitation the rights
@@ -21,6 +22,7 @@
 -- This file is a heavily modified version of the original HAProxy Lua script for decoding Minecraft handshakes. 
 -- It was made for a whole different purpose, and there were few issues.
 -- ORIGINAL LICENSE below:
+
 --[[
   This script is a Lua file for decoding the Minecraft handshake (protocol
   version, hostname, next-state) with HAProxy to choose which backend to use.
@@ -49,6 +51,15 @@ local string_len  = string.len
 local string_byte = string.byte
 local string_sub  = string.sub
 local string_find = string.find
+
+-- Toggle verbose handshake logs for debugging only so terminal doesn't get spammed.
+local DEBUG = false
+
+local function log_debug(msg)
+    if DEBUG then
+        core.Info(msg)
+    end
+end
 
 -- Returns the number of readable bytes in this payload.
 local function payload_readable_len(payload)
@@ -113,11 +124,11 @@ end
 -- Decode the minecraft handshake packet.
 local function read_mc_handshake(payload)
     if payload[1] == nil then
-        core.Info("mc_handshake: no payload yet")
+        log_debug("mc_handshake: no payload yet")
         return
     end
 
-    core.Info(string.format(
+    log_debug(string.format(
         "mc_handshake: raw_len=%d readable=%d hex=%s",
         string_len(payload[1]),
         payload_readable_len(payload),
@@ -126,57 +137,56 @@ local function read_mc_handshake(payload)
 
     -- read packet len
     local packet_len = payload_read_varint(payload, 3, true)
-    core.Info("mc_handshake: packet_len=" .. tostring(packet_len))
+    log_debug("mc_handshake: packet_len=" .. tostring(packet_len))
     if packet_len == nil then
-        core.Info("mc_handshake: need more data for packet_len")
+        log_debug("mc_handshake: need more data for packet_len")
         return
     end
     if packet_len == -1 or packet_len > 4096 then
-        core.Info("mc_handshake: invalid packet_len, fast-fail")
+        log_debug("mc_handshake: invalid packet_len, fast-fail")
         return false
     end
     if packet_len > payload_readable_len(payload) then
-        core.Info("mc_handshake: incomplete packet, waiting more data")
+        log_debug("mc_handshake: incomplete packet, waiting more data")
         return
     end
 
-    -- read packet id (this is where 26.1 differs from 1.7+)
+    -- read packet id (for handshakes this must be 0)
     local packet_id = payload_read_varint(payload, 3, false)
-    core.Info("mc_handshake: packet_id=" .. tostring(packet_id))
-
-    -- OLD strict check (breaks on new versions eg 26.1):
-    -- if packet_id ~= 0 then return false end
-
-    -- For debugging, we accept any packet_id here and just log it.
-    if packet_id == -1 then
-        core.Info("mc_handshake: invalid packet_id")
+    log_debug("mc_handshake: packet_id=" .. tostring(packet_id))
+    if packet_id == -1 or packet_id ~= 0 then
+        log_debug("mc_handshake: invalid packet_id")
         return false
     end
 
     -- read protocol version
     local protocol_version = payload_read_varint(payload, 5, false)
-    core.Info("mc_handshake: protocol_version=" .. tostring(protocol_version))
+    log_debug("mc_handshake: protocol_version=" .. tostring(protocol_version))
     if protocol_version == -1 or protocol_version <= 0 then
-        core.Info("mc_handshake: illegal protocol_version, fast-fail")
+        log_debug("mc_handshake: illegal protocol_version, fast-fail")
         return false
     end
 
     -- read hostname
     local hostname = payload_read_string(payload, 3, 255)
-    core.Info("mc_handshake: hostname_raw=" .. tostring(hostname))
+    log_debug("mc_handshake: hostname_raw=" .. tostring(hostname))
     if hostname == false then
-        core.Info("mc_handshake: illegal hostname, fast-fail")
+        log_debug("mc_handshake: illegal hostname, fast-fail")
         return false
     end
 
     -- skip port
+    if payload_readable_len(payload) < 2 then
+        log_debug("mc_handshake: missing port bytes")
+        return false
+    end
     payload[2] = payload[2] + 2
 
     -- read state
     local state = payload_read_varint(payload, 2, false)
-    core.Info("mc_handshake: state=" .. tostring(state))
+    log_debug("mc_handshake: state=" .. tostring(state))
     if state ~= 1 and state ~= 2 then
-        core.Info("mc_handshake: illegal state, fast-fail")
+        log_debug("mc_handshake: illegal state, fast-fail")
         return false
     end
 
@@ -185,7 +195,7 @@ local function read_mc_handshake(payload)
     if host_end ~= nil then
         hostname = string_sub(hostname, 1, host_end - 1)
     end
-    core.Info(string.format(
+    log_debug(string.format(
         "mc_handshake: SUCCESS proto=%s host=%s state=%s",
         tostring(protocol_version), tostring(hostname), tostring(state)
     ))
@@ -195,10 +205,10 @@ end
 -- HAProxy action
 local function mc_handshake(txn)
     local raw = txn.req:dup()
-    core.Info(string.format("mc_handshake: txn.req.len=%d", string_len(raw or "")))
+    log_debug(string.format("mc_handshake: txn.req.len=%d", string_len(raw or "")))
 
     local res, proto, host, state = read_mc_handshake({ raw, 1 })
-    core.Info(string.format("mc_handshake: result=%s proto=%s host=%s state=%s",
+    log_debug(string.format("mc_handshake: result=%s proto=%s host=%s state=%s",
         tostring(res), tostring(proto), tostring(host), tostring(state)))
 
     if res == nil then
