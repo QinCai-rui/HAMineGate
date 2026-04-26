@@ -21,7 +21,7 @@
   SOFTWARE.
 ]]
 
--- This file is a heavily modified version of the original HAProxy Lua script for decoding Minecraft handshakes. 
+-- This file is a *heavily* modified version of the original HAProxy Lua script for decoding Minecraft handshakes. 
 -- It was made for a whole different purpose, and there were few issues.
 -- ORIGINAL LICENSE below:
 
