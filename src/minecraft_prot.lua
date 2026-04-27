@@ -1,35 +1,18 @@
 -- THIS IS NOT A STANDALONE LUA FILE, BUT MEANT TO BE USED AS A MODULE.
 
 --[[
-  MIT LICENSE
-  Copyright 2026 Raymont Qin
-  https://github.com/QinCai-rui/HAMineGate
-  Permission is hereby granted, free of charge, to any person obtaining a copy
-  of this software and associated documentation files (the "Software"), to deal
-  in the Software without restriction, including without limitation the rights
-  to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-  copies of the Software, and to permit persons to whom the Software is
-  furnished to do so, subject to the following conditions:
-  The above copyright notice and this permission notice shall be included in all
-  copies or substantial portions of the Software.
-  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-  FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-  AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-  LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-  SOFTWARE.
+  This file is part of HAMineGate.
+  Copyright (C) 2026 Raymont Qin
+
+  This Source Code Form is subject to the terms of the Mozilla Public
+  License, v. 2.0. If a copy of the MPL was not distributed with this
+  file, You can obtain one at https://mozilla.org/MPL/2.0/.
 ]]
 
--- This file is a *heavily* modified version of the original HAProxy Lua script for decoding Minecraft handshakes. 
--- It was made for a whole different purpose, and there were few issues.
+-- This file is a *heavily* modified version of the following work (which was made for a different purpose)
 -- ORIGINAL LICENSE below:
 
 --[[
-  This script is a Lua file for decoding the Minecraft handshake (protocol
-  version, hostname, next-state) with HAProxy to choose which backend to use.
-  https://gist.github.com/nathan818fr/a078e92604784ad56e84843ebf99e2e5
---
   MIT LICENSE
   Copyright 2021 Nathan Poirier
   Permission is hereby granted, free of charge, to any person obtaining a copy
