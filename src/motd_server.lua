@@ -324,7 +324,7 @@ local function handle_client(client)
     if next_state == 2 then
         -- LOGIN ATTEMPT: Client is trying to actually join the server
         -- Since backend is offline, we send a disconnect message
-        read_packet(client). -- Consume the login start packet
+        read_packet(client)  -- Consume the login start packet
         send_login_disconnect(client, proto, host)  -- Send disconnect message
         client:close()  -- Client sees "Connection lost" or "Disconnected" with our message
         return
