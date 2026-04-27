@@ -67,7 +67,7 @@ local motds = {
 {
   "version": {"name": "● Offline", "protocol": -1},
   "players": {"max": 0, "online": 0},
-  "description": {"text": "§c§lService Paused\n§7Our servers are taking a strategic coffee break"}
+  "description": {"text": "§e§lService Paused\n§7Our servers are taking a strategic coffee break"}
 }
 ]],
     [[
