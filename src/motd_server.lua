@@ -1,7 +1,3 @@
--- TODOS: 
--- logging IP addresses that have attempted to connect while server is down (ie. clients that conencted to this server)
--- async handling of clients (currently each client is handled synchronously, which means if one client takes a long time to send data, it can block others...., altho i have a 2-second timeout on all socket operations to mitigate this)
-
 -- THIS IS A STANDALONE LUA FILE, not MEANT TO BE USED AS A MODULE.
 -- It implements a 'fake' Minecraft server that responds to ping requests with random MOTDs and disconnects login attempts with random messages.
 -- Used as fallback in haproxy, when real backend is offline
