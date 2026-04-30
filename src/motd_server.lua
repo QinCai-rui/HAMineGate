@@ -43,10 +43,19 @@ local socket = require("socket")
 -- seed for rng
 math.randomseed(os.time())
 
+-- LOGGING CONFIGURE
+-- set ENABLE_LOGGING to false to disable ALL logging
+-- set LOG_STATUS_REQUESTS / LOG_LOGIN_ATTEMPTS to control which request types get logged
+-- status requests are what i call "server list pings"
+-- login attempts are when clients actually try to join a sevrer.
+local ENABLE_LOGGING = true
+local LOG_STATUS_REQUESTS = true
+local LOG_LOGIN_ATTEMPTS = true
+
 -- use a log file
 -- why did i not use syslog or some other log daemon? 
 -- this is supposed to run on a very minimal system (my router in this case) and i did not want to 
-local LOG_PATH = "motd_server.log"
+local LOG_PATH = "/root/motd_server.log"
 
 -- MOTD POOL
 -- Pool of Message-Of-The-Day responses in JSON format
@@ -223,7 +232,44 @@ local function build_disconnect_json(base_msg, proto, host)
     )
 end
 
+local function write_log(line)
+    if not ENABLE_LOGGING then
+        return
+    end
+
+    local file = io.open(LOG_PATH, "a")
+    if file then
+        file:write(line, "\n")
+        file:close()
+    end
+
+    print(line)
+end
+
+local function log_status_request(client, proto, host)
+    if not LOG_STATUS_REQUESTS then
+        return
+    end
+
+    local ip, port = client:getpeername()
+    local timestamp = os.date("%Y-%m-%d %H:%M:%S")
+    local line = string.format(
+        "[%s] server list ping from %s:%s proto=%s host=%s",
+        timestamp,
+        tostring(ip or "unknown"),
+        tostring(port or "unknown"),
+        tostring(proto or -1),
+        tostring(host or "unknown")
+    )
+
+    write_log(line)
+end
+
 local function log_login_attempt(client, proto, host)
+    if not LOG_LOGIN_ATTEMPTS then
+        return
+    end
+
     local ip, port = client:getpeername()
     -- TODO: consider changing the date format. might be a bit too long and cluttered right now, at least IMO
     local timestamp = os.date("%Y-%m-%d %H:%M:%S")
@@ -236,13 +282,7 @@ local function log_login_attempt(client, proto, host)
         tostring(host or "unknown")
     )
 
-    local file = io.open(LOG_PATH, "a")
-    if file then
-        file:write(line, "\n")
-        file:close()
-    end
-
-    print(line)
+    write_log(line)
 end
 
 --[[ 
@@ -342,6 +382,7 @@ local function handle_client(client)
 
     if next_state == 1 then
         -- STATUS REQUEST: Client is checking server in the list (server.ping/motd)
+        log_status_request(client, proto, host)
         handle_status(client)
         client:close()
         return
