@@ -261,6 +261,7 @@ local function send_login_disconnect(client, proto, host)
 
     client:send(full)
     socket.sleep(0.1)
+end
 
 --[[ 
     HANDLE STATUS REQUEST (server list ping)
