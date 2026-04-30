@@ -1,6 +1,6 @@
 # TODO List
 
-1. logging IP addresses that have attempted to connect while server is down (ie. clients that conencted to this server)
+1. DONE: logging IP addresses that have attempted to connect while server is down (ie. clients that conencted to this server): implemented in src/motd_server.lua
 
 2. async handling of clients (currently each client is handled synchronously, which means if one client takes a long time to send data, it can block others...., altho i have a 2-second timeout on all socket operations to mitigate this)
 
