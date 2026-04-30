@@ -398,7 +398,7 @@ end
     Responds to login attempts with a disconnect message
     Packet structure: [packet_length] [packet_id: 0x00] [message_length] [message_json]
 --]]
-local function send_login_disconnect(client, proto, host)
+local function send_login_disconnect(conn, proto, host)
     local base = pick(disconnect_msgs)  -- Select random disconnect message
     local msg = build_disconnect_json(base, proto, host)  -- Build full JSON message
 
@@ -407,7 +407,7 @@ local function send_login_disconnect(client, proto, host)
     local packet = write_varint(0x00) .. payload  -- Prepend packet id
     local full = write_varint(#packet) .. packet  -- Prepend packet length
 
-    client:send(full)
+    conn.client:send(full)
     socket.sleep(0.1)
 end
 
@@ -416,10 +416,10 @@ end
     When client opens the multiplayer server list menu, or click on the Refresh button there, it sends a status request
     We respond with a MOTD and then handle the ping and pong
 --]]
-local function handle_status(client)
+local function handle_status(conn)
     -- Step 1: Read status request packet
     -- Format: [packet_id: 0x00] (no additional data)
-    local req = read_packet(client)
+    local req = read_packet(conn)
     if not req then return end
 
     -- check: verify packet id is 0x00 (status request)
@@ -443,12 +443,12 @@ local function handle_status(client)
         motd                       -- JSON text with MOTD data
 
     local packet = write_varint(#payload) .. payload
-    client:send(packet)
+    conn.client:send(packet)
 
     -- Step 4: Read ping packet from client
     -- Format: [packet_id: 0x01] [payload: 8 bytes]
     -- The 8-byte payload is typically a timestamp that we echo back
-    local ping = read_packet(client)
+    local ping = read_packet(conn)
     if not ping then return end
 
     -- Verify packet id is 0x01 (ping request)
@@ -471,7 +471,7 @@ local function handle_status(client)
         write_varint(#pong_payload) ..
         pong_payload
 
-    client:send(pong_packet)
+    conn.client:send(pong_packet)
 end
 
 -- HANDLE INDIVIDUAL CLIENT CONNECTION
@@ -488,6 +488,14 @@ local function handle_client(client)
         return
     end
 
+    -- log a PROXY v1 header if present
+    local sock_ip, sock_port = client:getpeername()
+    if proxy_peer == nil then
+        write_log(string.format("[INFO] PROXY header absent; socket=%s:%s", tostring(sock_ip or "unknown"), tostring(sock_port or "unknown")))
+    elseif type(proxy_peer) == "table" and proxy_peer.ip then
+        write_log(string.format("[INFO] PROXY header present; client=%s:%s (socket=%s:%s)", proxy_peer.ip, tostring(proxy_peer.port or "?"), tostring(sock_ip or "unknown"), tostring(sock_port or "unknown")))
+    end
+
     local peer_ip, peer_port = get_socket_peer(client, proxy_peer)
 
     -- Step 1: Read handshake packet to determine what the client wants
@@ -500,7 +508,7 @@ local function handle_client(client)
     if next_state == 1 then
         -- STATUS REQUEST: Client is checking server in the list (server.ping/motd)
         log_status_request(peer_ip, peer_port, proto, host)
-        handle_status(client)
+        handle_status(conn)
         client:close()
         return
     end
@@ -510,7 +518,7 @@ local function handle_client(client)
         -- Since backend is offline, we send a disconnect message
         log_login_attempt(peer_ip, peer_port, proto, host) -- log the attempt
         read_packet(conn)  -- Consume the login start packet
-        send_login_disconnect(client, proto, host)  -- Send disconnect message
+        send_login_disconnect(conn, proto, host)  -- Send disconnect message
         client:close()  -- Client sees "Connection lost" or "Disconnected" with our message
         return
     end
