@@ -10,6 +10,8 @@
 -- 5. Closes the connection after handling
 
 -- It also logs login attempts with prot. version, hostname used, and timestamp.
+-- If HAProxy sends a PROXY protocol v1 header (which is always because of haproxy.cfg), the server uses that to log the real client address instead of local socket address (which happens to be 127.0.0.1).
+-- without this logging would essentialy be useless because you do not even know where the traffic came from
 
 -- Protocol decoding/handling adapted from minecraft_prot.lua, which in turn was adapted from the original HAProxy Minecraft handshake decoder. 
 -- See `minecraft_prot.lua` for more info.
@@ -131,6 +133,114 @@ local function pick(list)
     return list[math.random(#list)]
 end
 
+-- START function is written with help from AI
+local function get_socket_peer(client, proxy_peer)
+    if proxy_peer and proxy_peer.ip then
+        return proxy_peer.ip, proxy_peer.port
+    end
+
+    return client:getpeername()
+end
+
+local function make_connection(client)
+    return {
+        client = client,
+        buffer = "",
+    }
+end
+
+local function fill_buffer(conn, needed)
+    while #conn.buffer < needed do
+        local chunk, err, partial = conn.client:receive(needed - #conn.buffer)
+        if chunk and #chunk > 0 then
+            conn.buffer = conn.buffer .. chunk
+        elseif partial and #partial > 0 then
+            conn.buffer = conn.buffer .. partial
+            return nil, err
+        else
+            return nil, err
+        end
+    end
+
+    return true
+end
+
+local function read_byte(conn)
+    if #conn.buffer > 0 then
+        local byte = conn.buffer:sub(1, 1)
+        conn.buffer = conn.buffer:sub(2)
+        return byte
+    end
+
+    return conn.client:receive(1)
+end
+
+local function read_bytes(conn, count)
+    local chunks = {}
+    for i = 1, count do
+        local byte = read_byte(conn)
+        if not byte then
+            return nil
+        end
+        chunks[i] = byte
+    end
+
+    return table.concat(chunks)
+end
+
+local function read_line(conn)
+    local chunks = {}
+    while true do
+        local byte = read_byte(conn)
+        if not byte then
+            return nil
+        end
+
+        chunks[#chunks + 1] = byte
+        local len = #chunks
+        if len >= 2 and chunks[len - 1] == "\r" and chunks[len] == "\n" then
+            return table.concat(chunks, "", 1, len - 2)
+        end
+    end
+end
+
+local function read_proxy_v1_header(conn)
+    local ok = fill_buffer(conn, 5)
+    if not ok then
+        return nil
+    end
+
+    if conn.buffer:sub(1, 5) ~= "PROXY" then
+        return nil
+    end
+
+    conn.buffer = conn.buffer:sub(6)
+    local rest = read_line(conn)
+    if not rest then
+        return false
+    end
+
+    local line = "PROXY" .. rest
+    if line == "PROXY UNKNOWN" then
+        return { ip = nil, port = nil, family = "UNKNOWN" }
+    end
+
+    local family, src_ip, _dst_ip, src_port, _dst_port = line:match(
+        "^PROXY%s+(TCP4|TCP6)%s+(%S+)%s+(%S+)%s+(%d+)%s+(%d+)$"
+    )
+
+    if not family then
+        return false
+    end
+
+    return {
+        ip = src_ip,
+        port = tonumber(src_port),
+        family = family,
+    }
+end
+-- END functions written with help from AI
+
 --[[ 
     VARINT ENCODING
     Minecraft protocol uses variable-length integers for efficiency i believe
@@ -157,10 +267,10 @@ end
     Reads varints from the client connection
     Reads bytes until *bit 7* is not set
 --]]
-local function read_varint(client)
+local function read_varint(conn)
     local num, shift = 0, 0
     while true do
-        local b = client:receive(1)  -- Read one byte from client
+        local b = read_byte(conn)  -- Read one byte from client
         if not b then return nil end  -- Connection closed or timeout
         local v = string.byte(b)
         num = num + ((v % 128) * (128 ^ shift))  -- Extract lower 7 bits and add to result
@@ -175,10 +285,10 @@ end
     Minecraft packets are prefixed with a varint indicating their length
     Format: [packet_length_varint][packet_data]
 --]]
-local function read_packet(client)
-    local length = read_varint(client)  -- Read packet length
+local function read_packet(conn)
+    local length = read_varint(conn)  -- Read packet length
     if not length then return nil end  -- Failed to read (timeout or disconnect)
-    return client:receive(length)  -- Read exactly 'length' bytes
+    return read_bytes(conn, length)  -- Read exactly 'length' bytes
 end
 
 --[[ 
@@ -187,8 +297,8 @@ end
     Format: [packet_id: varint] [protocol_version: varint] [server_host: string] [server_port: ushort] [next_state: varint]
     next_state: 1 = STATUS (multiplayer server list ping), 2 = LOGIN (login attempt)
 --]]
-local function read_handshake(client)
-    local data = read_packet(client)
+local function read_handshake(conn)
+    local data = read_packet(conn)
     if not data then return nil end
 
     local idx = 1
@@ -246,18 +356,17 @@ local function write_log(line)
     print(line)
 end
 
-local function log_status_request(client, proto, host)
+local function log_status_request(peer_ip, peer_port, proto, host)
     if not LOG_STATUS_REQUESTS then
         return
     end
 
-    local ip, port = client:getpeername()
     local timestamp = os.date("%Y-%m-%d %H:%M:%S")
     local line = string.format(
         "[%s] server list ping from %s:%s proto=%s host=%s",
         timestamp,
-        tostring(ip or "unknown"),
-        tostring(port or "unknown"),
+        tostring(peer_ip or "unknown"),
+        tostring(peer_port or "unknown"),
         tostring(proto or -1),
         tostring(host or "unknown")
     )
@@ -265,19 +374,18 @@ local function log_status_request(client, proto, host)
     write_log(line)
 end
 
-local function log_login_attempt(client, proto, host)
+local function log_login_attempt(peer_ip, peer_port, proto, host)
     if not LOG_LOGIN_ATTEMPTS then
         return
     end
 
-    local ip, port = client:getpeername()
     -- TODO: consider changing the date format. might be a bit too long and cluttered right now, at least IMO
     local timestamp = os.date("%Y-%m-%d %H:%M:%S")
     local line = string.format(
         "[%s] login attempt from %s:%s proto=%s host=%s",
         timestamp,
-        tostring(ip or "unknown"),
-        tostring(port or "unknown"),
+        tostring(peer_ip or "unknown"),
+        tostring(peer_port or "unknown"),
         tostring(proto or -1),
         tostring(host or "unknown")
     )
@@ -373,8 +481,17 @@ local function handle_client(client)
     -- Set 2-second timeout for all socket operations so we don't hang for any reason
     client:settimeout(2)
 
+    local conn = make_connection(client)
+    local proxy_peer = read_proxy_v1_header(conn)
+    if proxy_peer == false then
+        client:close()
+        return
+    end
+
+    local peer_ip, peer_port = get_socket_peer(client, proxy_peer)
+
     -- Step 1: Read handshake packet to determine what the client wants
-    local next_state, proto, host = read_handshake(client)
+    local next_state, proto, host = read_handshake(conn)
     if not next_state then 
         client:close() 
         return 
@@ -382,7 +499,7 @@ local function handle_client(client)
 
     if next_state == 1 then
         -- STATUS REQUEST: Client is checking server in the list (server.ping/motd)
-        log_status_request(client, proto, host)
+        log_status_request(peer_ip, peer_port, proto, host)
         handle_status(client)
         client:close()
         return
@@ -391,8 +508,8 @@ local function handle_client(client)
     if next_state == 2 then
         -- LOGIN ATTEMPT: Client is trying to actually join the server
         -- Since backend is offline, we send a disconnect message
-        log_login_attempt(client, proto, host) -- log the attempt
-        read_packet(client)  -- Consume the login start packet
+        log_login_attempt(peer_ip, peer_port, proto, host) -- log the attempt
+        read_packet(conn)  -- Consume the login start packet
         send_login_disconnect(client, proto, host)  -- Send disconnect message
         client:close()  -- Client sees "Connection lost" or "Disconnected" with our message
         return
