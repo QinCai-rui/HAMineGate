@@ -9,6 +9,8 @@
 -- 4. If LOGIN (2): responds with a disconnect message (backend is unavailable, blah blah blah)
 -- 5. Closes the connection after handling
 
+-- It also logs login attempts with prot. version, hostname used, and timestamp.
+
 -- Protocol decoding/handling adapted from minecraft_prot.lua, which in turn was adapted from the original HAProxy Minecraft handshake decoder. 
 -- See `minecraft_prot.lua` for more info.
 
@@ -40,6 +42,11 @@ local PORT = 25566                  --#
 local socket = require("socket")
 -- seed for rng
 math.randomseed(os.time())
+
+-- use a log file
+-- why did i not use syslog or some other log daemon? 
+-- this is supposed to run on a very minimal system (my router in this case) and i did not want to 
+local LOG_PATH = "motd_server.log"
 
 -- MOTD POOL
 -- Pool of Message-Of-The-Day responses in JSON format
@@ -216,6 +223,28 @@ local function build_disconnect_json(base_msg, proto, host)
     )
 end
 
+local function log_login_attempt(client, proto, host)
+    local ip, port = client:getpeername()
+    -- TODO: consider changing the date format. might be a bit too long and cluttered right now, at least IMO
+    local timestamp = os.date("%Y-%m-%d %H:%M:%S")
+    local line = string.format(
+        "[%s] login attempt from %s:%s proto=%s host=%s",
+        timestamp,
+        tostring(ip or "unknown"),
+        tostring(port or "unknown"),
+        tostring(proto or -1),
+        tostring(host or "unknown")
+    )
+
+    local file = io.open(LOG_PATH, "a")
+    if file then
+        file:write(line, "\n")
+        file:close()
+    end
+
+    print(line)
+end
+
 --[[ 
     SEND LOGIN DISCONNECT PACKET
     Responds to login attempts with a disconnect message
@@ -320,6 +349,7 @@ local function handle_client(client)
     if next_state == 2 then
         -- LOGIN ATTEMPT: Client is trying to actually join the server
         -- Since backend is offline, we send a disconnect message
+        log_login_attempt(client, proto, host) -- log the attempt
         read_packet(client)  -- Consume the login start packet
         send_login_disconnect(client, proto, host)  -- Send disconnect message
         client:close()  -- Client sees "Connection lost" or "Disconnected" with our message
