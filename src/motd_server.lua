@@ -35,7 +35,7 @@
 
 --#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#
 -- CONFIGURE HOST AND PORT HERE!!!!-#-#
-local HOST = "localhost"            --#
+local HOST = "127.0.0.1"            --#
 local PORT = 25566                  --#
 --#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#
 
