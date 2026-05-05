@@ -10,8 +10,6 @@
 -- 5. Closes the connection after handling
 
 -- It also logs login attempts with prot. version, hostname used, and timestamp.
--- If HAProxy sends a PROXY protocol v1 header (which is always because of haproxy.cfg), the server uses that to log the real client address instead of local socket address (which happens to be 127.0.0.1).
--- without this logging would essentialy be useless because you do not even know where the traffic came from
 
 -- Protocol decoding/handling adapted from minecraft_prot.lua, which in turn was adapted from the original HAProxy Minecraft handshake decoder. 
 -- See `minecraft_prot.lua` for more info.
@@ -167,15 +165,6 @@ local function get_cached_disconnect_msg()
     return get_cached_random(disconnect_msgs, disconnect_msg_cache, MOTD_REFRESH_SECONDS)
 end
 
--- START function is written with help from AI
-local function get_socket_peer(client, proxy_peer)
-    if proxy_peer and proxy_peer.ip then
-        return proxy_peer.ip, proxy_peer.port
-    end
-
-    return client:getpeername()
-end
-
 local function make_connection(client)
     return {
         client = client,
@@ -238,59 +227,6 @@ local function read_line(conn)
     end
 end
 
-local function read_proxy_v1_header(conn)
-    local deadline = socket.gettime() + 0.25
-    while #conn.buffer < 5 and socket.gettime() < deadline do
-        local chunk, err, partial = conn.client:receive(5 - #conn.buffer)
-        if chunk and #chunk > 0 then
-            conn.buffer = conn.buffer .. chunk
-        elseif partial and #partial > 0 then
-            conn.buffer = conn.buffer .. partial
-        elseif err and err ~= "timeout" then
-            return false
-        end
-
-        if #conn.buffer >= 5 then
-            break
-        end
-    end
-
-    if #conn.buffer < 5 then
-        if conn.buffer:sub(1, 3) == "PRO" then
-            return false
-        end
-        return nil
-    end
-
-    if conn.buffer:sub(1, 5) ~= "PROXY" then
-        return nil
-    end
-
-    conn.buffer = conn.buffer:sub(6)
-    local rest = read_line(conn)
-    if not rest then
-        return false
-    end
-
-    local line = "PROXY" .. rest
-    if line == "PROXY UNKNOWN" then
-        return { ip = nil, port = nil, family = "UNKNOWN" }
-    end
-
-    local family, src_ip, _dst_ip, src_port, _dst_port = line:match(
-        "^PROXY%s+(TCP4|TCP6)%s+(%S+)%s+(%S+)%s+(%d+)%s+(%d+)$"
-    )
-
-    if not family then
-        return false
-    end
-
-    return {
-        ip = src_ip,
-        port = tonumber(src_port),
-        family = family,
-    }
-end
 -- END functions written with help from AI
 
 --[[ 
@@ -531,21 +467,8 @@ local function handle_client(client)
     client:settimeout(2)
 
     local conn = make_connection(client)
-    local proxy_peer = read_proxy_v1_header(conn)
-    if proxy_peer == false then
-        client:close()
-        return
-    end
-
-    -- log a PROXY v1 header if present
     local sock_ip, sock_port = client:getpeername()
-    if proxy_peer == nil then
-        write_log(string.format("[INFO] PROXY header absent; socket=%s:%s", tostring(sock_ip or "unknown"), tostring(sock_port or "unknown")))
-    elseif type(proxy_peer) == "table" and proxy_peer.ip then
-        write_log(string.format("[INFO] PROXY header present; client=%s:%s (socket=%s:%s)", proxy_peer.ip, tostring(proxy_peer.port or "?"), tostring(sock_ip or "unknown"), tostring(sock_port or "unknown")))
-    end
-
-    local peer_ip, peer_port = get_socket_peer(client, proxy_peer)
+    local peer_ip, peer_port = sock_ip, sock_port
 
     -- Step 1: Read handshake packet to determine what the client wants
     local next_state, proto, host = read_handshake(conn)
