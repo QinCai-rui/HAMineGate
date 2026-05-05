@@ -1,12 +1,12 @@
 -- THIS IS A STANDALONE LUA FILE, not MEANT TO BE USED AS A MODULE.
--- It implements a 'fake' Minecraft server that responds to ping requests with random MOTDs and disconnects login attempts with random messages.
+-- It implements a 'fake' Minecraft server that responds to ping requests with a periodically refreshed MOTD and disconnects login attempts with a periodically refreshed message.
 -- Used as fallback in haproxy, when real backend is offline
 --
 -- This:
 -- 1. Listens for incoming Minecraft client connections (handshake protocol)
 -- 2. Reads the handshake packet to determine what the client wants (STATUS or LOGIN)
--- 3. If STATUS (1): responds with a random MOTD from the pool
--- 4. If LOGIN (2): responds with a disconnect message (backend is unavailable, blah blah blah)
+-- 3. If STATUS (1): responds with a cached MOTD that refreshes periodically
+-- 4. If LOGIN (2): responds with a cached disconnect message that refreshes periodically
 -- 5. Closes the connection after handling
 
 -- It also logs login attempts with prot. version, hostname used, and timestamp.
@@ -133,6 +133,40 @@ local function pick(list)
     return list[math.random(#list)]
 end
 
+local MOTD_REFRESH_SECONDS = 30
+
+local motd_cache = {
+    value = nil,
+    expires_at = 0,
+}
+
+local disconnect_msg_cache = {
+    value = nil,
+    expires_at = 0,
+}
+
+local function get_cached_random(list, cache, ttl_seconds)
+    local now = os.time()
+    if not cache.value or now >= cache.expires_at then
+        cache.value = pick(list)
+        cache.expires_at = now + ttl_seconds
+    end
+
+    return cache.value
+end
+
+local function get_cached_motd()
+    local motd = get_cached_random(motds, motd_cache, MOTD_REFRESH_SECONDS)
+    motd = motd:gsub("\r\n", "\n")      -- Convert Windows line endings
+    motd = motd:gsub("^\n+", "")        -- Remove leading newlines
+    motd = motd:gsub("\n+$", "")        -- Remove trailing newlines
+    return motd
+end
+
+local function get_cached_disconnect_msg()
+    return get_cached_random(disconnect_msgs, disconnect_msg_cache, MOTD_REFRESH_SECONDS)
+end
+
 -- START function is written with help from AI
 local function get_socket_peer(client, proxy_peer)
     if proxy_peer and proxy_peer.ip then
@@ -205,8 +239,26 @@ local function read_line(conn)
 end
 
 local function read_proxy_v1_header(conn)
-    local ok = fill_buffer(conn, 5)
-    if not ok then
+    local deadline = socket.gettime() + 0.25
+    while #conn.buffer < 5 and socket.gettime() < deadline do
+        local chunk, err, partial = conn.client:receive(5 - #conn.buffer)
+        if chunk and #chunk > 0 then
+            conn.buffer = conn.buffer .. chunk
+        elseif partial and #partial > 0 then
+            conn.buffer = conn.buffer .. partial
+        elseif err and err ~= "timeout" then
+            return false
+        end
+
+        if #conn.buffer >= 5 then
+            break
+        end
+    end
+
+    if #conn.buffer < 5 then
+        if conn.buffer:sub(1, 3) == "PRO" then
+            return false
+        end
         return nil
     end
 
@@ -399,7 +451,7 @@ end
     Packet structure: [packet_length] [packet_id: 0x00] [message_length] [message_json]
 --]]
 local function send_login_disconnect(conn, proto, host)
-    local base = pick(disconnect_msgs)  -- Select random disconnect message
+    local base = get_cached_disconnect_msg()  -- Select cached disconnect message
     local msg = build_disconnect_json(base, proto, host)  -- Build full JSON message
 
     -- Build login disconnect packet (packet id 0x00)
@@ -429,11 +481,8 @@ local function handle_status(conn)
         return
     end
 
-    -- Step 2: Select random MOTD and normalide formatting
-    local motd = pick(motds)
-    motd = motd:gsub("\r\n", "\n")  -- Convert Windows line endings
-    motd = motd:gsub("^\n+", "")    -- Remove leading newlines
-    motd = motd:gsub("\n+$", "")    -- Remove trailing newlines
+    -- Step 2: Select cached MOTD and normalide formatting
+    local motd = get_cached_motd()
 
     -- Step 3: Build and send status response packet
     -- Format: [packet_id: 0x00] [json_length_varint] [json_text]
