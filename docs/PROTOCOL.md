@@ -46,18 +46,9 @@ Protocol handling for routing and filtering is implemented in:
 1. Client opens TCP connection to HAProxy frontend `minecraft` on port `25565`.
 2. HAProxy waits up to `500ms` (`tcp-request inspect-delay 500ms`) to collect initial bytes.
 3. HAProxy runs Lua action `lua.mc_handshake`.
-4. Lua decodes and validates handshake fields:
-    - packet length (VarInt)
-    - packet id (must be `0x00`)
-    - protocol version (VarInt)
-    - server address / hostname (String)
-    - server port (unsigned short, skipped)
-    - next state (VarInt, must be `1` or `2`)
-5. Lua writes parsed results into transaction variables:
-    - `txn.mc_proto`
-    - `txn.mc_host`
-    - `txn.mc_state`
-6. HAProxy ACLs use these variables to reject invalid or unauthorised requests, otherwise route to backend `velocity`.
+4. Lua decodes and validates handshake fields: packet length (VarInt), packet id (must be `0x00`), protocol version (VarInt), server address / hostname (String), server port (unsigned short, skipped), and next state (VarInt, must be `1` or `2`).
+5. Lua loads the IP blocklist and hostname allowlist from text files, then writes parsed policy results into transaction variables `txn.mc_proto`, `txn.mc_host`, `txn.mc_state`, `txn.mc_blocked`, and `txn.mc_hostname_allowed`.
+6. HAProxy rejects invalid or unauthorised requests using those variables, otherwise routes to backend `velocity`.
 
 ## Handshake Packet Layout
 
@@ -155,12 +146,11 @@ After Lua action runs:
     tcp-request content reject if { var(txn.mc_proto) -m int 0 }
     ```
 
-2. Host allowlist ACLs:
+2. Reject blocked source IPs and disallowed hostnames using Lua-loaded policy files:
 
     ```haproxy
-    acl allowed1 var(txn.mc_host) -m reg ^([^.]+\.)*mc\.qincai\.xyz\.?$
-    acl allowed3 var(txn.mc_host) -m str 2407:7000:f030:c684::1
-    tcp-request content reject if !allowed1 !allowed3
+    tcp-request content reject if { var(txn.mc_blocked) -m int 1 }
+    tcp-request content reject if { var(txn.mc_hostname_allowed) -m int 0 }
     ```
 
 3. If accepted, forward to backend `velocity`.

@@ -1,0 +1,6 @@
+# Hostnames allowed by minecraft_prot.lua
+# One hostname or domain suffix per line. Blank lines and lines starting with # are ignored.
+# Matching is NOT case-sensitive and accepts exact hostnames or subdomains.
+
+mc.qincai.xyz
+2407:7000:f030:c684::1

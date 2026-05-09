@@ -12,6 +12,8 @@
 -- This file is a *heavily* modified version of the following work (which was made for a different purpose)
 -- ORIGINAL LICENSE below:
 
+---@diagnostic disable: undefined-global
+
 --[[
   MIT LICENSE
   Copyright 2021 Nathan Poirier
@@ -36,14 +38,89 @@ local string_len  = string.len
 local string_byte = string.byte
 local string_sub  = string.sub
 local string_find = string.find
+local string_lower = string.lower
 
 -- Toggle verbose handshake logs for debugging only so terminal doesn't get spammed.
 local DEBUG = false
+
+local BLOCKED_IPS_PATH = "/root/haproxy/blocked_ips.txt"
+local ALLOWED_HOSTNAMES_PATH = "/root/haproxy/allowed_hostnames.txt"
 
 local function log_debug(msg)
     if DEBUG then
         core.Info(msg)
     end
+end
+
+local function trim(text)
+    return (text:gsub("^%s+", ""):gsub("%s+$", ""))
+end
+
+local function load_lines(path)
+    local entries = {}
+    local file = io.open(path, "r")
+
+    if not file then
+        log_debug("policy: unable to open " .. path .. ", using empty list")
+        return entries
+    end
+
+    for line in file:lines() do
+        line = trim(line)
+        if line ~= "" and not line:match("^#") then
+            entries[#entries + 1] = line
+        end
+    end
+
+    file:close()
+    return entries
+end
+
+local function list_to_set(lines, normalize)
+    local set = {}
+    for _, line in ipairs(lines) do
+        local key = normalize and normalize(line) or line
+        if key ~= "" then
+            set[key] = true
+        end
+    end
+    return set
+end
+
+local blocked_ips = list_to_set(load_lines(BLOCKED_IPS_PATH), string_lower)
+local allowed_host_patterns = load_lines(ALLOWED_HOSTNAMES_PATH)
+
+local function is_blocked_ip(src_ip)
+    if not src_ip or src_ip == "" then
+        return false
+    end
+
+    return blocked_ips[string_lower(src_ip)] == true
+end
+
+local function hostname_is_allowed(hostname)
+    if not hostname or hostname == "" then
+        return false
+    end
+
+    hostname = string_lower(hostname)
+    for _, pattern in ipairs(allowed_host_patterns) do
+        pattern = string_lower(trim(pattern))
+        if pattern ~= "" then
+            if hostname == pattern then
+                return true
+            end
+
+            if string_len(hostname) > string_len(pattern) then
+                local suffix = string_sub(hostname, -string_len(pattern) - 1)
+                if suffix == "." .. pattern then
+                    return true
+                end
+            end
+        end
+    end
+
+    return false
 end
 
 -- Returns the number of readable bytes in this payload.
@@ -176,10 +253,10 @@ local function read_mc_handshake(payload)
     end
 
     -- trim suffix after \0
-    local host_end = string_find(hostname, '\0', 1, true)
-    if host_end ~= nil then
-        hostname = string_sub(hostname, 1, host_end - 1)
+    if type(hostname) ~= "string" then
+        return false
     end
+    hostname = hostname:gsub("%z.*$", "")
     log_debug(string.format(
         "mc_handshake: SUCCESS proto=%s host=%s state=%s",
         tostring(protocol_version), tostring(hostname), tostring(state)
@@ -207,6 +284,17 @@ local function mc_handshake(txn)
         txn:set_var('txn.mc_proto', proto)
         txn:set_var('txn.mc_host', host)
         txn:set_var('txn.mc_state', state)
+
+        local src_ip = txn.sf:src()
+        local blocked = is_blocked_ip(src_ip) and 1 or 0
+        local allowed = hostname_is_allowed(host) and 1 or 0
+
+        txn:set_var('txn.mc_blocked', blocked)
+        txn:set_var('txn.mc_hostname_allowed', allowed)
+        log_debug(string.format(
+            "mc_handshake: policy src=%s blocked=%s host_allowed=%s",
+            tostring(src_ip), tostring(blocked), tostring(allowed)
+        ))
     end
 end
 
