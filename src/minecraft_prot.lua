@@ -107,6 +107,16 @@ local function hostname_is_allowed(hostname)
     for _, pattern in ipairs(allowed_host_patterns) do
         pattern = string_lower(trim(pattern))
         if pattern ~= "" then
+            local wildcard_suffix = pattern:match("^%*%.(.+)$")
+            if wildcard_suffix ~= nil then
+                if string_len(hostname) > string_len(wildcard_suffix) then
+                    local suffix = string_sub(hostname, -string_len(wildcard_suffix))
+                    if suffix == wildcard_suffix and string_sub(hostname, -(string_len(wildcard_suffix) + 1), -(string_len(wildcard_suffix) + 1)) == "." then
+                        return true
+                    end
+                end
+            end
+
             if hostname == pattern then
                 return true
             end
