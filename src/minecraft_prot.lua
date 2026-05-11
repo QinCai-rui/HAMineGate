@@ -104,6 +104,8 @@ local function hostname_is_allowed(hostname)
     end
 
     hostname = string_lower(hostname)
+    -- normalise: remove a trailing dot (for some reason present in handshake hostname in state 2, ie player logging in)
+    hostname = hostname:gsub("%.$", "")
     for _, pattern in ipairs(allowed_host_patterns) do
         pattern = string_lower(trim(pattern))
         if pattern ~= "" then
