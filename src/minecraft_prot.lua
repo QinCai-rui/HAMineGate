@@ -276,38 +276,27 @@ local function read_mc_handshake(payload)
     return true, protocol_version, hostname, state
 end
 
--- HAProxy action
-local function mc_handshake(txn)
+-- HAProxy sample fetch
+local function mc_analyze(txn)
     local raw = txn.req:dup()
-    log_debug(string.format("mc_handshake: txn.req.len=%d", string_len(raw or "")))
+    if not raw then return nil end
 
     local res, proto, host, state = read_mc_handshake({ raw, 1 })
-    log_debug(string.format("mc_handshake: result=%s proto=%s host=%s state=%s",
-        tostring(res), tostring(proto), tostring(host), tostring(state)))
-
     if res == nil then
-        -- do nothing, HAProxy may call us again when more data arrives
-        return
+        -- Incomplete data. Return nil so HAProxy waits up to inspect-delay.
+        return nil
     elseif res == false then
-        txn:set_var('txn.mc_proto', 0)
-        txn:set_var('txn.mc_host', '')
-        txn:set_var('txn.mc_state', 0)
+        return "invalid"
     else
-        txn:set_var('txn.mc_proto', proto)
-        txn:set_var('txn.mc_host', host)
-        txn:set_var('txn.mc_state', state)
-
         local src_ip = txn.sf:src()
-        local blocked = is_blocked_ip(src_ip) and 1 or 0
-        local allowed = hostname_is_allowed(host) and 1 or 0
-
-        txn:set_var('txn.mc_blocked', blocked)
-        txn:set_var('txn.mc_hostname_allowed', allowed)
-        log_debug(string.format(
-            "mc_handshake: policy src=%s blocked=%s host_allowed=%s",
-            tostring(src_ip), tostring(blocked), tostring(allowed)
-        ))
+        if is_blocked_ip(src_ip) then
+            return "block_ip"
+        end
+        if not hostname_is_allowed(host) then
+            return "block_host"
+        end
+        return "allow"
     end
 end
 
-core.register_action('mc_handshake', { 'tcp-req' }, mc_handshake, 0)
+core.register_fetches('mc_analyze', mc_analyze)
