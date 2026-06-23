@@ -175,7 +175,7 @@ end
 -- Gets a String at the current reader_index and increases the reader_index by its length.
 local function payload_read_string(payload, max_prefix_bytes, max_utf8_len)
     local str_len = payload_read_varint(payload, max_prefix_bytes, false)
-    if (str_len == -1 or str_len > max_utf8_len or str_len > payload_readable_len(payload)) then
+    if (str_len == -1 or str_len == 0 or str_len > max_utf8_len or str_len > payload_readable_len(payload)) then
         return false
     end
     local str = string_sub(payload[1], payload[2], payload[2] + str_len - 1)
@@ -236,7 +236,7 @@ local function read_mc_handshake(payload)
     -- read protocol version
     local protocol_version = payload_read_varint(payload, 5, false)
     log_debug("mc_handshake: protocol_version=" .. tostring(protocol_version))
-    if protocol_version == -1 or protocol_version <= 0 then
+    if protocol_version == nil or protocol_version == -1 or protocol_version <= 0 then
         log_debug("mc_handshake: illegal protocol_version, fast-fail")
         return false
     end
