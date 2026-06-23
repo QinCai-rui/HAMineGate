@@ -255,15 +255,16 @@ end
     Reads varints from the client connection
     Reads bytes until *bit 7* is not set
 --]]
-local function read_varint(conn)
+local function read_varint(conn, max_bytes)
     local num, shift = 0, 0
     while true do
         local b = read_byte(conn)  -- Read one byte from client
         if not b then return nil end  -- Connection closed or timeout
         local v = string.byte(b)
         num = num + ((v % 128) * (128 ^ shift))  -- Extract lower 7 bits and add to result
-        if v < 128 then break end  -- No continuation bit, number is complete
         shift = shift + 1
+        if v < 128 then break end  -- No continuation bit, number is complete
+        if max_bytes and shift >= max_bytes then return nil end
     end
     return num
 end
@@ -273,8 +274,8 @@ end
     Minecraft packets are prefixed with a varint indicating their length
     Format: [packet_length_varint][packet_data]
 --]]
-local function read_packet(conn)
-    local length = read_varint(conn)  -- Read packet length
+local function read_packet(conn, max_bytes)
+    local length = read_varint(conn, max_bytes)  -- Read packet length
     if not length then return nil end  -- Failed to read (timeout or disconnect)
     return read_bytes(conn, length)  -- Read exactly 'length' bytes
 end
@@ -286,34 +287,44 @@ end
     next_state: 1 = STATUS (multiplayer server list ping), 2 = LOGIN (login attempt)
 --]]
 local function read_handshake(conn)
-    local data = read_packet(conn)
+    local data = read_packet(conn, 5)
     if not data then return nil end
 
     local idx = 1
     -- Local helper to read varints directly from packet buffer (instead of from socket)
+    local max_varint = 5
     local function read_varint_from()
         local num, shift = 0, 0
         while true do
+            if idx > #data then return nil end
             local v = data:byte(idx)
             idx = idx + 1
             num = num + ((v % 128) * (128 ^ shift))
-            if v < 128 then break end
             shift = shift + 1
+            if v < 128 then break end
+            if shift >= max_varint then return nil end
         end
         return num
     end
 
     local packet_id = read_varint_from()  -- Should be 0x00 for handshake
+    if not packet_id then return nil end
+
     local proto = read_varint_from()  -- Minecraft protocol version number
+    if not proto then return nil end
 
     -- read server hostname (string format: [length_varint][string_bytes])
     local host_len = read_varint_from()
+    if not host_len or idx + host_len - 1 > #data then return nil end
+
     local host = data:sub(idx, idx + host_len - 1)
     idx = idx + host_len
 
     idx = idx + 2  -- Skip port (2 bytes, bigendian short)
 
     local next_state = read_varint_from()  -- 1 = STATUS, 2 = LOGIN
+    if not next_state then return nil end
+
     return next_state, proto, host
 end
 
@@ -407,7 +418,7 @@ end
 local function handle_status(conn)
     -- Step 1: Read status request packet
     -- Format: [packet_id: 0x00] (no additional data)
-    local req = read_packet(conn)
+    local req = read_packet(conn, 5)
     if not req then return end
 
     -- check: verify packet id is 0x00 (status request)
@@ -433,7 +444,7 @@ local function handle_status(conn)
     -- Step 4: Read ping packet from client
     -- Format: [packet_id: 0x01] [payload: 8 bytes]
     -- The 8-byte payload is typically a timestamp that we echo back
-    local ping = read_packet(conn)
+    local ping = read_packet(conn, 5)
     if not ping then return end
 
     -- Verify packet id is 0x01 (ping request)
@@ -464,36 +475,40 @@ end
 -- Main logic: read handshake, determine what client wants (status or login), then respond
 local function handle_client(client)
     -- Set 2-second timeout for all socket operations so we don't hang for any reason
-    client:settimeout(2)
+    pcall(function() client:settimeout(2) end)
 
-    local conn = make_connection(client)
-    local sock_ip, sock_port = client:getpeername()
-    local peer_ip, peer_port = sock_ip, sock_port
+    local ok, err = pcall(function()
+        local conn = make_connection(client)
+        local sock_ip, sock_port = client:getpeername()
+        local peer_ip, peer_port = sock_ip, sock_port
 
-    -- Step 1: Read handshake packet to determine what the client wants
-    local next_state, proto, host = read_handshake(conn)
-    if not next_state then 
-        client:close() 
-        return 
+        -- Step 1: Read handshake packet to determine what the client wants
+        local next_state, proto, host = read_handshake(conn)
+        if not next_state then return end
+
+        if next_state == 1 then
+            -- STATUS REQUEST: Client is checking server in the list (server.ping/motd)
+            log_status_request(peer_ip, peer_port, proto, host)
+            handle_status(conn)
+            return
+        end
+
+        if next_state == 2 then
+            -- LOGIN ATTEMPT: Client is trying to actually join the server
+            -- Since backend is offline, we send a disconnect message
+            log_login_attempt(peer_ip, peer_port, proto, host) -- log the attempt
+            read_packet(conn, 5)  -- Consume the login start packet
+            send_login_disconnect(conn, proto, host)  -- Send disconnect message
+            return
+        end
+    end)
+
+    if not ok then
+        write_log("[ERROR] handle_client: " .. tostring(err))
     end
 
-    if next_state == 1 then
-        -- STATUS REQUEST: Client is checking server in the list (server.ping/motd)
-        log_status_request(peer_ip, peer_port, proto, host)
-        handle_status(conn)
-        client:close()
-        return
-    end
-
-    if next_state == 2 then
-        -- LOGIN ATTEMPT: Client is trying to actually join the server
-        -- Since backend is offline, we send a disconnect message
-        log_login_attempt(peer_ip, peer_port, proto, host) -- log the attempt
-        read_packet(conn)  -- Consume the login start packet
-        send_login_disconnect(conn, proto, host)  -- Send disconnect message
-        client:close()  -- Client sees "Connection lost" or "Disconnected" with our message
-        return
-    end
+    -- Always try to close the client socket
+    pcall(function() client:close() end)
 end
 
 local server = assert(socket.bind(HOST, PORT))
