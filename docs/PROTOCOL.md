@@ -23,7 +23,7 @@ So basically, `HAMineGate` is a gatekeeper. It inspects the first Minecraft pack
 
 ### Why check hostnames?
 
-In short, hostname checking lets you implement a simple allowlist (ACL in `haproxy.cfg`) without extra backend logic. See the main [README.md](../README.md#why-implement-a-hostname-allowlist) for my reasoning.
+In short, hostname checking lets you implement a simple allowlist (via Lua policy files `allowed_hostnames.txt` and `blocked_ips.txt`) without extra backend logic. See the main [README.md](../README.md#why-implement-a-hostname-allowlist) for my reasoning.
 
 -----------------------------------------------------------------------
 
@@ -36,7 +36,7 @@ This document explains how HAMineGate processes inbound Minecraft Java Edition T
 Protocol handling for routing and filtering is implemented in:
 
 - `src/minecraft_prot.lua` (HAProxy Lua action)
-- `src/haproxy.cfg` (frontend policy and ACL decisions)
+- `src/haproxy.cfg` (frontend policy decisions, Lua-driven)
 
 > [!NOTE]
 > The logic targets the Minecraft **handshake** packet only (the first packet sent by a Java client).
