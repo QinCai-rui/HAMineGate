@@ -174,22 +174,6 @@ local function make_connection(client)
     }
 end
 
-local function fill_buffer(conn, needed)
-    while #conn.buffer < needed do
-        local chunk, err, partial = conn.client:receive(needed - #conn.buffer)
-        if chunk and #chunk > 0 then
-            conn.buffer = conn.buffer .. chunk
-        elseif partial and #partial > 0 then
-            conn.buffer = conn.buffer .. partial
-            return nil, err
-        else
-            return nil, err
-        end
-    end
-
-    return true
-end
-
 local function read_byte(conn)
     if #conn.buffer > 0 then
         local byte = conn.buffer:sub(1, 1)
@@ -211,22 +195,6 @@ local function read_bytes(conn, count)
     end
 
     return table.concat(chunks)
-end
-
-local function read_line(conn)
-    local chunks = {}
-    while true do
-        local byte = read_byte(conn)
-        if not byte then
-            return nil
-        end
-
-        chunks[#chunks + 1] = byte
-        local len = #chunks
-        if len >= 2 and chunks[len - 1] == "\r" and chunks[len] == "\n" then
-            return table.concat(chunks, "", 1, len - 2)
-        end
-    end
 end
 
 -- END functions written with help from AI
@@ -473,7 +441,6 @@ local function handle_status(conn)
 end
 
 -- HANDLE INDIVIDUAL CLIENT CONNECTION
--- TODO: async, ip logging
 -- Main logic: read handshake, determine what client wants (status or login), then respond
 local function handle_client(client)
     -- Set 2-second timeout for all socket operations so we don't hang for any reason
