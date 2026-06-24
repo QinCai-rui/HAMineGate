@@ -9,7 +9,8 @@
 -- 4. If LOGIN (2): responds with a cached disconnect message that refreshes periodically
 -- 5. Closes the connection after handling
 
--- It also logs login attempts with prot. version, hostname used, and timestamp.
+-- It also logs login attempts with protocol version, hostname used, and timestamp.
+-- TODO: use proxy-protocol to get real client IPs instead of localhost/127.0.0.1
 
 -- Protocol decoding/handling adapted from minecraft_prot.lua, which in turn was adapted from the original HAProxy Minecraft handshake decoder. 
 -- See `minecraft_prot.lua` for more info.
@@ -53,8 +54,9 @@ local LOG_STATUS_REQUESTS = true
 local LOG_LOGIN_ATTEMPTS = true
 
 -- use a log file
--- why did i not use syslog or some other log daemon? 
--- this is supposed to run on a very minimal system (my router in this case) and i did not want to 
+-- "why did i not use syslog or some other log daemon?"
+-- this is supposed to run on a very minimal system (my GL.iNet router, which has less than 0.5GB of RAM, in this case) and i did not want to 
+-- use like half of that for a log daemon...
 local LOG_PATH = "/root/motd_server.log"
 
 -- MOTD POOL
