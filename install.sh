@@ -104,8 +104,8 @@ if [ "$HAS_FLAGS" = "0" ] && [ "$NONINTERACTIVE" = "0" ]; then
     # Only prompt if /dev/tty is available (piped via curl but user is at a terminal)
     if [ -c /dev/tty ] 2>/dev/null; then
         printf "\n${BOLD}${M}╔══════════════════════════╗${NC}\n"
-        printf "${BOLD}${M}║  HAMineGate  Installer   ║${NC}\n"
-        printf "${BOLD}${M}╚══════════════════════════╝${NC}\n\n"
+        printf   "${BOLD}${M}║  HAMineGate  Installer   ║${NC}\n"
+        printf   "${BOLD}${M}╚══════════════════════════╝${NC}\n\n"
 
         if [ "$LOCAL" = "1" ]; then
             sub "Source: ${C}${REPO_DIR}${NC} (local)"
@@ -203,8 +203,8 @@ fi
 
 # ---- Plan overview ----
 printf "\n${BOLD}${B}╔══════════════════════════════════════╗${NC}\n"
-printf "${BOLD}${B}║  Installation plan                   ║${NC}\n"
-printf "${BOLD}${B}╚══════════════════════════════════════╝${NC}\n\n"
+printf   "${BOLD}${B}║  Installation plan                   ║${NC}\n"
+printf   "${BOLD}${B}╚══════════════════════════════════════╝${NC}\n\n"
 
 if [ "$LOCAL" = "1" ]; then
     sub "Source: ${C}${REPO_DIR}${NC}"
@@ -369,7 +369,7 @@ printf "  ${BOLD}Init scripts:${NC}  %b\n"  "${C}${INIT_DIR}/{haproxy,mc-motd-fa
 echo
 printf "  ${BOLD}Next steps:${NC}\n"
 printf "    ${Y}1.${NC} Edit ${C}${HAPROXY_DIR}/haproxy.cfg${NC} to match your backend\n"
-printf "    ${Y}2.${NC} Edit ${C}${HAPROXY_DIR}/allowed_hostnames.txt${NC} with your domains\n"
+printf "    ${Y}2.${NC} Edit ${C}${HAPROXY_DIR}/allowed_hostnames.txt${NC} with your server hostnames/domains\n"
 printf "    ${Y}3.${NC} Edit ${C}${HAPROXY_DIR}/blocked_ips.txt${NC} if needed\n"
 printf "    ${Y}4.${NC} Restart HAProxy: ${C}service haproxy restart${NC}\n"
 echo
