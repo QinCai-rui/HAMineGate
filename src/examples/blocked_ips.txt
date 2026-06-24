@@ -1,2 +1,5 @@
 # Source IPs blocked by minecraft_prot.lua
 # One IP per line. Blank lines and lines starting with # are ignored.
+
+172.66.147.243
+104.20.23.154
