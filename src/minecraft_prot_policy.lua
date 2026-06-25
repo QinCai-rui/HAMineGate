@@ -27,26 +27,15 @@ do
     CONFIG_PATH = (dir or ".") .. "haminegate_cfg.lua"
 end
 
-local config = (function()
-    local f, err = loadfile(CONFIG_PATH)
-    if not f then
-        util.log_debug("policy: could not load " .. CONFIG_PATH .. " (" .. tostring(err) .. ")")
-        return { blocked_ips = {}, allowed_hostnames = {} }
-    end
-    local ok, result = pcall(f)
-    if not ok or type(result) ~= "table" then
-        util.log_debug("policy: invalid config file (" .. tostring(result) .. ")")
-        return { blocked_ips = {}, allowed_hostnames = {} }
-    end
-    return result
-end)()
+local config = assert(loadfile(CONFIG_PATH), "could not load " .. CONFIG_PATH)()
+assert(type(config) == "table", "invalid config")
 
 local blocked_ips_set = {}
-for _, ip in ipairs(config.blocked_ips or {}) do
+for _, ip in ipairs(config.blocked_ips) do
     blocked_ips_set[string_lower(ip)] = true
 end
 
-local allowed_host_patterns = config.allowed_hostnames or {}
+local allowed_host_patterns = config.allowed_hostnames
 
 local M = {}
 
