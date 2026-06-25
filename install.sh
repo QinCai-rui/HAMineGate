@@ -7,7 +7,7 @@ set -e
 #  Requires only: curl, sh (POSIX)
 #
 #  Usage:
-#    curl -sSL https://raw.githubusercontent.com/QinCai-rui/HAMineGate/main/install.sh | bash
+#    curl -sSfL https://raw.githubusercontent.com/QinCai-rui/HAMineGate/main/install.sh | bash
 #    curl ... | bash -s -- --haproxy-dir /etc/haproxy
 #    HAPROXY_DIR=/etc/haproxy ./install.sh
 #
@@ -47,7 +47,7 @@ usage() {
 ${BOLD}HAMineGate Installer${NC}
 
 ${BOLD}Usage:${NC}
-  ${C}curl -sSL https://raw.githubusercontent.com/QinCai-rui/HAMineGate/main/install.sh | bash${NC}
+  ${C}curl -sSfL https://raw.githubusercontent.com/QinCai-rui/HAMineGate/main/install.sh | bash${NC}
   ${C}curl ... | bash -s -- --haproxy-dir /etc/haproxy --force${NC}
   ${C}HAPROXY_DIR=/etc/haproxy ./install.sh${NC}
 
@@ -290,7 +290,7 @@ for f in minecraft_prot.lua minecraft_prot_util.lua minecraft_prot_policy.lua mi
     if [ "$LOCAL" = "1" ]; then
         cp "$REPO_DIR/src/$f" "$HAPROXY_DIR/$f"
     else
-        curl -sSL "$BASE_URL/src/$f" -o "$HAPROXY_DIR/$f"
+        curl -sSfL "$BASE_URL/src/$f" -o "$HAPROXY_DIR/$f"
     fi
     ok "$HAPROXY_DIR/$f"
 done
@@ -307,14 +307,14 @@ elif [ "$MODE_HAPROXY_CFG" = "backup" ] && [ -f "$HAPROXY_DIR/haproxy.cfg" ]; th
     if [ "$LOCAL" = "1" ]; then
         cp "$REPO_DIR/src/haproxy.cfg" "$HAPROXY_DIR/haproxy.cfg"
     else
-        curl -sSL "$BASE_URL/src/haproxy.cfg" -o "$HAPROXY_DIR/haproxy.cfg"
+        curl -sSfL "$BASE_URL/src/haproxy.cfg" -o "$HAPROXY_DIR/haproxy.cfg"
     fi
     ok "$HAPROXY_DIR/haproxy.cfg"
 elif [ "$MODE_HAPROXY_CFG" != "skip" ]; then
     if [ "$LOCAL" = "1" ]; then
         cp "$REPO_DIR/src/haproxy.cfg" "$HAPROXY_DIR/haproxy.cfg"
     else
-        curl -sSL "$BASE_URL/src/haproxy.cfg" -o "$HAPROXY_DIR/haproxy.cfg"
+        curl -sSfL "$BASE_URL/src/haproxy.cfg" -o "$HAPROXY_DIR/haproxy.cfg"
     fi
     ok "$HAPROXY_DIR/haproxy.cfg"
 fi
@@ -329,7 +329,7 @@ for f in blocked_ips.txt allowed_hostnames.txt; do
         if [ "$LOCAL" = "1" ]; then
             cp "$REPO_DIR/src/examples/$f" "$HAPROXY_DIR/$f"
         else
-            curl -sSL "$BASE_URL/src/examples/$f" -o "$HAPROXY_DIR/$f"
+            curl -sSfL "$BASE_URL/src/examples/$f" -o "$HAPROXY_DIR/$f"
         fi
         ok "$HAPROXY_DIR/$f"
     fi
@@ -347,7 +347,7 @@ for pair in "haproxy:MODE_INIT_HAPROXY" "mc-motd-fallback:MODE_INIT_MOTD"; do
         if [ "$LOCAL" = "1" ]; then
             cp "$REPO_DIR/services/sysvinit/$fname" "$INIT_DIR/$fname"
         else
-            curl -sSL "$BASE_URL/services/sysvinit/$fname" -o "$INIT_DIR/$fname"
+            curl -sSfL "$BASE_URL/services/sysvinit/$fname" -o "$INIT_DIR/$fname"
         fi
         chmod +x "$INIT_DIR/$fname"
         ok "$INIT_DIR/$fname"
