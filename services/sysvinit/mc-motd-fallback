@@ -13,9 +13,15 @@ start_service() {
     procd_set_param respawn 2000 5 5
     procd_set_param stdout 1
     procd_set_param stderr 1
+    procd_set_param pidfile /var/run/$SERVICE_NAME.pid
     procd_close_instance
 }
 
 stop_service() {
-    killall lua 2>/dev/null
+    local pid
+    pid=$(cat /var/run/$SERVICE_NAME.pid 2>/dev/null)
+    if [ -n "$pid" ]; then
+        kill "$pid" 2>/dev/null
+        rm -f /var/run/$SERVICE_NAME.pid
+    fi
 }
