@@ -1,5 +1,25 @@
 # SysVinit service files
 
-`haproxy` should be placed in `/etc/init.d/` and made executable (`chmod +x /etc/init.d/haproxy`).
+`haminegate` is a unified wrapper script that manages both HAProxy and the MOTD fallback server.
 
-Then you can use `service haproxy start|stop|restart|status` to manage the service, check the configuration with `service haproxy check`. You may also want to enable it on boot with `update-rc.d haproxy enable`.
+Place it in `/etc/init.d/` or `/usr/local/bin/` and make executable:
+
+```bash
+    chmod +x haminegate
+```
+
+Then use:
+
+```bash
+    haminegate start|stop|restart|status|check   # background service mode
+    haminegate -f|--foreground                    # foreground (Ctrl+C to stop)
+```
+
+In background mode, process PIDs are tracked in `/var/run/haproxy.pid` and
+`/var/run/motd-fallback.pid`.
+
+Override the HAProxy scripts directory with `HAPROXY_DIR`:
+
+```bash
+    HAPROXY_DIR=/etc/haproxy haminegate start
+```

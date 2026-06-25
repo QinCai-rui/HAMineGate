@@ -138,13 +138,11 @@ FILE_EXISTS_CONFIG=0
 # ---- Mode decisions ----
 MODE_HAPROXY_CFG="overwrite"
 MODE_CONFIG="overwrite"
-MODE_INIT_HAPROXY="overwrite"
-MODE_INIT_MOTD="overwrite"
+MODE_INIT_WRAPPER="overwrite"
 
 if [ "$FORCE" = "1" ]; then
     MODE_CONFIG="overwrite"
-    MODE_INIT_HAPROXY="overwrite"
-    MODE_INIT_MOTD="overwrite"
+    MODE_INIT_WRAPPER="overwrite"
 elif [ "$NONINTERACTIVE" = "1" ]; then
     # Non-interactive: preserve existing config, install if missing
     [ "$FILE_EXISTS_CONFIG" = "1" ] && MODE_CONFIG="skip"
@@ -168,20 +166,14 @@ elif [ -c /dev/tty ] 2>/dev/null; then
         esac
     fi
 
-    for pair in "haproxy:MODE_INIT_HAPROXY" "mc-motd-fallback:MODE_INIT_MOTD"; do
-        fname="${pair%%:*}"
-        mvar="${pair##*:}"
-        exists=0
-        [ -f "$INIT_DIR/$fname" ] && exists=1
-        if [ "$exists" = "1" ]; then
-            printf "  ${Y}?${NC} ${INIT_DIR}/$fname exists. Overwrite? ${BOLD}[Y/n]${NC} "
-            read -r input < /dev/tty || true
-            case "$(printf "%s" "$input" | tr '[:upper:]' '[:lower:]')" in
-                n|no) eval "${mvar}=skip" ;;
-                *) ;;
-            esac
-        fi
-    done
+    if [ -f "$INIT_DIR/haminegate" ]; then
+        printf "  ${Y}?${NC} ${INIT_DIR}/haminegate exists. Overwrite? ${BOLD}[Y/n]${NC} "
+        read -r input < /dev/tty || true
+        case "$(printf "%s" "$input" | tr '[:upper:]' '[:lower:]')" in
+            n|no) MODE_INIT_WRAPPER="skip" ;;
+            *) ;;
+        esac
+    fi
     echo
 fi
 
@@ -225,17 +217,12 @@ else
 fi
 
 echo
-sub "${BOLD}Init scripts → ${C}${INIT_DIR}/${NC}"
-for pair in "haproxy:MODE_INIT_HAPROXY" "mc-motd-fallback:MODE_INIT_MOTD"; do
-    fname="${pair%%:*}"
-    mode_var="${pair##*:}"
-    eval "fmode=\${$mode_var}"
-    if [ "$fmode" = "skip" ]; then
-        info "$fname (${Y}skipping${NC})"
-    else
-        info "$fname"
-    fi
-done
+sub "${BOLD}Wrapper script → ${C}${INIT_DIR}/${NC}"
+if [ "$MODE_INIT_WRAPPER" = "skip" ]; then
+    info "haminegate (${Y}skipping${NC})"
+else
+    info "haminegate"
+fi
 
 echo
 
@@ -273,6 +260,7 @@ for f in minecraft_prot.lua minecraft_prot_util.lua minecraft_prot_policy.lua mi
         curl -sSfL "$BASE_URL/src/$f" -o "$HAPROXY_DIR/$f"
     fi
     ok "$HAPROXY_DIR/$f"
+    sdf sf
 done
 
 title "Installing HAProxy config → $HAPROXY_DIR"
@@ -311,34 +299,27 @@ else
     ok "$HAPROXY_DIR/haminegate_cfg.lua"
 fi
 
-title "Installing init scripts → $INIT_DIR"
+title "Installing wrapper script → $INIT_DIR"
 mkdir -p "$INIT_DIR"
-for pair in "haproxy:MODE_INIT_HAPROXY" "mc-motd-fallback:MODE_INIT_MOTD"; do
-    fname="${pair%%:*}"
-    mode_var="${pair##*:}"
-    eval "fmode=\${$mode_var}"
-    if [ "$fmode" = "skip" ]; then
-        warn "Skipping $fname (keeping existing)"
+if [ "$MODE_INIT_WRAPPER" = "skip" ]; then
+    warn "Skipping haminegate (keeping existing)"
+else
+    if [ "$LOCAL" = "1" ]; then
+        cp "$REPO_DIR/services/sysvinit/haminegate" "$INIT_DIR/haminegate"
     else
-        if [ "$LOCAL" = "1" ]; then
-            cp "$REPO_DIR/services/sysvinit/$fname" "$INIT_DIR/$fname"
-        else
-            curl -sSfL "$BASE_URL/services/sysvinit/$fname" -o "$INIT_DIR/$fname"
-        fi
-        chmod +x "$INIT_DIR/$fname"
-        ok "$INIT_DIR/$fname"
+        curl -sSfL "$BASE_URL/services/sysvinit/haminegate" -o "$INIT_DIR/haminegate"
     fi
-done
+    chmod +x "$INIT_DIR/haminegate"
+    ok "$INIT_DIR/haminegate"
+fi
 
 # ---- Substitute paths in installed files if non-default dir ----
 if [ "$HAPROXY_DIR" != "/root/haproxy" ]; then
     title "Updating paths in installed files → $HAPROXY_DIR"
-    for f in "$INIT_DIR/haproxy" "$INIT_DIR/mc-motd-fallback"; do
-        if [ -f "$f" ]; then
-            sed -i "s|/root/haproxy|$HAPROXY_DIR|g" "$f"
-            ok "Patched $f"
-        fi
-    done
+    if [ -f "$INIT_DIR/haminegate" ]; then
+        sed -i "s|/root/haproxy|$HAPROXY_DIR|g" "$INIT_DIR/haminegate"
+        ok "Patched $INIT_DIR/haminegate"
+    fi
     if [ -f "$HAPROXY_DIR/haproxy.cfg" ]; then
         sed -i "s|/root/haproxy|$HAPROXY_DIR|g" "$HAPROXY_DIR/haproxy.cfg"
         ok "Patched $HAPROXY_DIR/haproxy.cfg"
@@ -356,10 +337,10 @@ echo
 printf "  ${BOLD}Lua scripts:${NC}   %b\n"  "${C}${HAPROXY_DIR}/*.lua${NC}"
 printf "  ${BOLD}Config:${NC}        %b\n"  "${C}${HAPROXY_DIR}/haminegate_cfg.lua${NC}"
 printf "  ${BOLD}HAProxy cfg:${NC}   %b\n"  "${C}${HAPROXY_DIR}/haproxy.cfg${NC}"
-printf "  ${BOLD}Init scripts:${NC}  %b\n"  "${C}${INIT_DIR}/{haproxy,mc-motd-fallback}${NC}"
+printf "  ${BOLD}Wrapper:${NC}       %b\n"  "${C}${INIT_DIR}/haminegate${NC}"
 echo
 printf "  ${BOLD}Next steps:${NC}\n"
 printf "    ${Y}1.${NC} Edit ${C}${HAPROXY_DIR}/haminegate_cfg.lua${NC} to set your blocked IPs and allowed hostnames\n"
 printf "    ${Y}2.${NC} Edit ${C}${HAPROXY_DIR}/haproxy.cfg${NC} to match your backend\n"
-printf "    ${Y}3.${NC} Restart HAProxy: ${C}service haproxy restart${NC}\n"
+printf "    ${Y}3.${NC} Start everything: ${C}${INIT_DIR}/haminegate start${NC}\n"
 echo
