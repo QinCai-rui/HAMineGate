@@ -17,7 +17,7 @@ local string_format = string.format
 local table_concat = table.concat
 
 -- Toggle verbose handshake logs for debugging only so terminal doesn't get spammed.
-local DEBUG = true
+local DEBUG = false
 
 local M = {}
 
