@@ -137,7 +137,7 @@ FILE_EXISTS_CONFIG=0
 
 # ---- Mode decisions ----
 MODE_HAPROXY_CFG="overwrite"
-MODE_CONFIG="skip"
+MODE_CONFIG="overwrite"
 MODE_INIT_HAPROXY="overwrite"
 MODE_INIT_MOTD="overwrite"
 
@@ -146,8 +146,8 @@ if [ "$FORCE" = "1" ]; then
     MODE_INIT_HAPROXY="overwrite"
     MODE_INIT_MOTD="overwrite"
 elif [ "$NONINTERACTIVE" = "1" ]; then
-    # Non-interactive: keep defaults (data files skip, scripts/config overwrite)
-    :
+    # Non-interactive: preserve existing config, install if missing
+    [ "$FILE_EXISTS_CONFIG" = "1" ] && MODE_CONFIG="skip"
 elif [ -c /dev/tty ] 2>/dev/null; then
     # Interactive — ask for each existing file
     if [ "$FILE_EXISTS_HAPROXY_CFG" = "1" ]; then
