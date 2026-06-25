@@ -16,13 +16,12 @@ local string_byte = string.byte
 local string_format = string.format
 local table_concat = table.concat
 
--- Toggle verbose handshake logs for debugging only so terminal doesn't get spammed.
-local DEBUG = false
-
 local M = {}
 
+M.DEBUG = false
+
 function M.log_debug(msg)
-    if DEBUG then
+    if M.DEBUG then
         core.Info(msg)
     end
 end

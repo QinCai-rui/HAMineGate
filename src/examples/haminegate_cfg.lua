@@ -3,6 +3,9 @@
 -- Place it in the same directory as the other haminegate Lua files.
 
 local config = {
+    -- Verbose HAProxy debug logs (hex dumps, parsed fields)
+    debug = false,
+
     -- MOTD server listen address and port
     listen_host = "127.0.0.1",
     listen_port = 25566,

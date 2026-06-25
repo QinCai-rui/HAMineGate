@@ -30,6 +30,8 @@ end
 local config = assert(loadfile(CONFIG_PATH), "could not load " .. CONFIG_PATH)()
 assert(type(config) == "table", "invalid config")
 
+util.DEBUG = config.debug == true
+
 local blocked_ips_set = {}
 for _, ip in ipairs(config.blocked_ips) do
     blocked_ips_set[string_lower(ip)] = true
