@@ -46,97 +46,21 @@ do
     CONFIG_PATH = (dir or ".") .. "haminegate_cfg.lua"
 end
 
-local config = (function()
-    local f, err = loadfile(CONFIG_PATH)
-    if not f then
-        print("[WARN] could not load " .. CONFIG_PATH .. " (" .. tostring(err) .. "), using defaults")
-        return {}
-    end
-    local ok, result = pcall(f)
-    if not ok or type(result) ~= "table" then
-        print("[WARN] invalid config file, using defaults")
-        return {}
-    end
-    return result
-end)()
+local config = assert(loadfile(CONFIG_PATH), "could not load " .. CONFIG_PATH)()
+assert(type(config) == "table", "invalid config")
 
 -- seed for rng
 math.randomseed(os.time())
 
-local HOST = config.listen_host or "127.0.0.1"
-local PORT = config.listen_port or 25566
+local HOST = config.listen_host
+local PORT = config.listen_port
 local ENABLE_LOGGING = true
 local LOG_STATUS_REQUESTS = (config.log_status_requests ~= false)
 local LOG_LOGIN_ATTEMPTS = (config.log_login_attempts ~= false)
-local LOG_PATH = config.log_path or "/root/motd_server.log"
+local LOG_PATH = config.log_path
 
--- MOTD POOL
--- Pool of Message-Of-The-Day responses in JSON format
--- Each MOTD is a valid Minecraft server status response JSON
-
---[[ 
-NOTE:
-- version.name is what shows up as the server version in the Minecraft server list
-- version.protocol (-1) is not a real Minecraft protocol version
-- Because no real client supports protocol -1, it shows "Incompatible Version" in the (multiplayer) server list
-- This makes it very clear to players that the server is offline
-- players.max and players.online are set to 0 (no one can join)
-
-This "hack" is inspired by services like Aternos
-
->> CHECK EXAMPLE SCREENSHOTS HERE: https://github.com/QinCai-rui/HAMineGate/tree/main/assets/offline-pingreq <<
---]]
-
-local motds = {
-    [[
-{
-  "version": {"name": "● Offline", "protocol": -1},
-  "players": {"max": 0, "online": 0},
-  "description": {"text": "§e§lService Paused\n§7Our servers are taking a strategic coffee break"}
-}
-]],
-    [[
-{
-  "version": {"name": "● Offline", "protocol": -1},
-  "players": {"max": 0, "online": 0},
-  "description": {"text": "§c§lServer Offline\n§7Maintenance underway. Grab a drink"}
-}
-]],
-    [[
-{
-  "version": {"name": "● Offline", "protocol": -1},
-  "players": {"max": 0, "online": 0},
-  "description": {"text": "§e§lTemporary Downtime\n§7The server insisted it was 'for productivity'"}
-}
-]],
-    [[
-{
-  "version": {"name": "● Offline", "protocol": -1},
-  "players": {"max": 0, "online": 0},
-  "description": {"text": "§6§lSystem Offline\n§7Server is applying updates it definitely asked for"}
-}
-]],
-    [[
-{
-  "version": {"name": "● Offline", "protocol": -1},
-  "players": {"max": 0, "online": 0},
-  "description": {"text": "§c§lServer Offline\n§7It saw one packet too many and simply passed away"}
-}
-]]
-}
-
---[[ 
-    DISCONNECT MESSAGE POOL
-    Random disconnect messages shown when clients attempt to login
-    These messages tell clients that the backend server is down
---]]
-local disconnect_msgs = {
-    "§cServer is restarting.\n§7Apparently it couldn’t handle *one* more login.",
-    "§cConnection denied.\n§7The server is busy restarting. Your timing, as always, is impeccable.",
-    "§cBackend unreachable.\n§7Velocity is offline or restarting.",
-    "§cCannot login.\n§7The system encountered an error. It refuses to elaborate.",
-    "§cSession terminated.\n§7The server has decided it’s had enough productivity for one day."
-}
+local motds = config.motds
+local disconnect_msgs = config.disconnect_msgs
 
 -- function to pick a random element from a list
 -- to randomly select MOTDs and disconnect messages
@@ -144,7 +68,7 @@ local function pick(list)
     return list[math.random(#list)]
 end
 
-local MOTD_REFRESH_SECONDS = config.motd_refresh_seconds or 30
+local MOTD_REFRESH_SECONDS = config.motd_refresh_seconds
 
 local motd_cache = {
     value = nil,
