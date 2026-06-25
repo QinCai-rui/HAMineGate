@@ -11,8 +11,8 @@ EXTRA_COMMANDS="check"
 
 HAPROXY_BIN="/usr/sbin/haproxy"
 
-# change this if config file is somewhere else
-HAPROXY_CONFIG="/root/haproxy/haproxy.cfg"
+HAPROXY_DIR="${HAPROXY_DIR:-/root/haproxy}"
+HAPROXY_CONFIG="$HAPROXY_DIR/haproxy.cfg"
 
 start_service() {
         procd_open_instance

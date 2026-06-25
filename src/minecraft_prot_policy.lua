@@ -17,11 +17,36 @@ local string_lower = string.lower
 
 local util = require("minecraft_prot_util")
 
-local BLOCKED_IPS_PATH = "/root/haproxy/blocked_ips.txt"
-local ALLOWED_HOSTNAMES_PATH = "/root/haproxy/allowed_hostnames.txt"
+local CONFIG_PATH
+do
+    local src = debug.getinfo(1, "S").source
+    if src:match("^@") then
+        src = src:sub(2)
+    end
+    local dir = src:match("^(.*[\\/])")
+    CONFIG_PATH = (dir or ".") .. "haminegate_cfg.lua"
+end
 
-local blocked_ips = util.list_to_set(util.load_lines(BLOCKED_IPS_PATH), string_lower)
-local allowed_host_patterns = util.load_lines(ALLOWED_HOSTNAMES_PATH)
+local config = (function()
+    local f, err = loadfile(CONFIG_PATH)
+    if not f then
+        util.log_debug("policy: could not load " .. CONFIG_PATH .. " (" .. tostring(err) .. ")")
+        return { blocked_ips = {}, allowed_hostnames = {} }
+    end
+    local ok, result = pcall(f)
+    if not ok or type(result) ~= "table" then
+        util.log_debug("policy: invalid config file (" .. tostring(result) .. ")")
+        return { blocked_ips = {}, allowed_hostnames = {} }
+    end
+    return result
+end)()
+
+local blocked_ips_set = {}
+for _, ip in ipairs(config.blocked_ips or {}) do
+    blocked_ips_set[string_lower(ip)] = true
+end
+
+local allowed_host_patterns = config.allowed_hostnames or {}
 
 local M = {}
 
@@ -30,7 +55,7 @@ function M.is_blocked_ip(src_ip)
         return false
     end
 
-    return blocked_ips[string_lower(src_ip)] == true
+    return blocked_ips_set[string_lower(src_ip)] == true
 end
 
 function M.hostname_is_allowed(hostname)

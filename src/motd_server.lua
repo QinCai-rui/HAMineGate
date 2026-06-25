@@ -34,30 +34,41 @@
   along with this program. If not, see <https://www.gnu.org/licenses/>.
 --]]
 
---#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#
--- CONFIGURE HOST AND PORT HERE!!!!-#-#
-local HOST = "127.0.0.1"            --#
-local PORT = 25566                  --#
---#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#
-
 local socket = require("socket")
+
+local CONFIG_PATH
+do
+    local src = debug.getinfo(1, "S").source
+    if src:match("^@") then
+        src = src:sub(2)
+    end
+    local dir = src:match("^(.*[\\/])")
+    CONFIG_PATH = (dir or ".") .. "haminegate_cfg.lua"
+end
+
+local config = (function()
+    local f, err = loadfile(CONFIG_PATH)
+    if not f then
+        print("[WARN] could not load " .. CONFIG_PATH .. " (" .. tostring(err) .. "), using defaults")
+        return {}
+    end
+    local ok, result = pcall(f)
+    if not ok or type(result) ~= "table" then
+        print("[WARN] invalid config file, using defaults")
+        return {}
+    end
+    return result
+end)()
+
 -- seed for rng
 math.randomseed(os.time())
 
--- LOGGING CONFIGURE
--- set ENABLE_LOGGING to false to disable ALL logging
--- set LOG_STATUS_REQUESTS / LOG_LOGIN_ATTEMPTS to control which request types get logged
--- status requests are what i call "server list pings"
--- login attempts are when clients actually try to join a sevrer.
+local HOST = config.listen_host or "127.0.0.1"
+local PORT = config.listen_port or 25566
 local ENABLE_LOGGING = true
-local LOG_STATUS_REQUESTS = true
-local LOG_LOGIN_ATTEMPTS = true
-
--- use a log file
--- "why did i not use syslog or some other log daemon?"
--- this is supposed to run on a very minimal system (my GL.iNet router, which has less than 0.5GB of RAM, in this case) and i did not want to 
--- use like half of that for a log daemon...
-local LOG_PATH = "/root/motd_server.log"
+local LOG_STATUS_REQUESTS = (config.log_status_requests ~= false)
+local LOG_LOGIN_ATTEMPTS = (config.log_login_attempts ~= false)
+local LOG_PATH = config.log_path or "/root/motd_server.log"
 
 -- MOTD POOL
 -- Pool of Message-Of-The-Day responses in JSON format
@@ -133,7 +144,7 @@ local function pick(list)
     return list[math.random(#list)]
 end
 
-local MOTD_REFRESH_SECONDS = 30
+local MOTD_REFRESH_SECONDS = config.motd_refresh_seconds or 30
 
 local motd_cache = {
     value = nil,
