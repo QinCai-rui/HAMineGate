@@ -1,0 +1,14 @@
+[Unit]
+Description=HAMineGate - Minecraft proxy with MOTD fallback
+Documentation=https://github.com/QinCai-rui/HAMineGate
+After=network.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/local/bin/haminegate start
+ExecStop=/usr/local/bin/haminegate stop
+ExecReload=/usr/local/bin/haminegate restart
+
+[Install]
+WantedBy=multi-user.target

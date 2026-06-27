@@ -1,0 +1,31 @@
+#!/bin/sh /etc/rc.common
+
+START=99
+STOP=80
+USE_PROCD=1
+
+HAMINEGATE_WRAPPER="${HAMINEGATE_WRAPPER:-/usr/local/bin/haminegate}"
+
+start_service() {
+    "$HAMINEGATE_WRAPPER" start
+}
+
+stop_service() {
+    "$HAMINEGATE_WRAPPER" stop
+}
+
+service_triggers() {
+    procd_add_reload_trigger "haminegate_cfg.lua"
+}
+
+EXTRA_COMMANDS="status check"
+EXTRA_HELP="  status  Show running status of both services
+  check   Validate HAProxy configuration syntax"
+
+status() {
+    "$HAMINEGATE_WRAPPER" status
+}
+
+check() {
+    "$HAMINEGATE_WRAPPER" check
+}

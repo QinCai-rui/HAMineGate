@@ -1,190 +1,29 @@
 #!/bin/sh
-# HAMineGate - unified wrapper for HAProxy + MOTD fallback server
-#
-# Usage:
-#   haminegate start|stop|restart|status|check   (background service)
-#   haminegate -f|--foreground                     (foreground, Ctrl+C to stop)
-#   haminegate -h|--help                           (this help)
-#
-# Environment variables:
-#   HAPROXY_DIR   Path to config & Lua scripts   [/root/haproxy]
-#   HAPROXY_BIN   HAProxy binary                 [/usr/sbin/haproxy]
-#   LUA_BIN       Lua interpreter binary         [/usr/bin/lua]
+### BEGIN INIT INFO
+# Provides:          haminegate
+# Required-Start:    $network $local_fs $remote_fs
+# Required-Stop:     $network $local_fs $remote_fs
+# Should-Start:
+# Should-Stop:
+# Default-Start:     2 3 4 5
+# Default-Stop:      0 1 6
+# Short-Description: HAMineGate - Minecraft proxy with MOTD fallback
+# Description:       Manages HAProxy and the MOTD fallback server
+#                    for Minecraft server proxy/gatekeeping.
+### END INIT INFO
 
-set -e
-
-HAPROXY_DIR="${HAPROXY_DIR:-/root/haproxy}"
-HAPROXY_BIN="${HAPROXY_BIN:-/usr/sbin/haproxy}"
-LUA_BIN="${LUA_BIN:-/usr/bin/lua}"
-
-HAPROXY_PID="${HAPROXY_PID:-/var/run/haproxy.pid}"
-MOTD_PID="${MOTD_PID:-/var/run/motd-fallback.pid}"
-
-HAPROXY_CONFIG="$HAPROXY_DIR/haproxy.cfg"
-MOTD_SCRIPT="$HAPROXY_DIR/motd_server.lua"
-
-is_running() {
-    [ -f "$1" ] && kill -0 "$(cat "$1" 2>/dev/null)" 2>/dev/null
-}
-
-write_pid() {
-    echo "$1" > "$2"
-}
-
-cleanup_pid() {
-    rm -f "$1"
-}
-
-start_haproxy() {
-    if is_running "$HAPROXY_PID"; then
-        echo "HAProxy already running (PID $(cat "$HAPROXY_PID"))"
-        return 0
-    fi
-    "$HAPROXY_BIN" -D -p "$HAPROXY_PID" -f "$HAPROXY_CONFIG"
-    echo "HAProxy started"
-}
-
-start_motd() {
-    if is_running "$MOTD_PID"; then
-        echo "MOTD server already running (PID $(cat "$MOTD_PID"))"
-        return 0
-    fi
-    "$LUA_BIN" "$MOTD_SCRIPT" &
-    write_pid "$!" "$MOTD_PID"
-    echo "MOTD server started"
-}
-
-stop_haproxy() {
-    if ! is_running "$HAPROXY_PID"; then
-        echo "HAProxy not running"
-        cleanup_pid "$HAPROXY_PID"
-        return 0
-    fi
-    pid=$(cat "$HAPROXY_PID" 2>/dev/null)
-    kill "$pid" 2>/dev/null || true
-    i=0
-    while is_running "$HAPROXY_PID" && [ "$i" -lt 10 ]; do
-        sleep 1
-        i=$((i + 1))
-    done
-    if is_running "$HAPROXY_PID"; then
-        kill -9 "$pid" 2>/dev/null || true
-    fi
-    cleanup_pid "$HAPROXY_PID"
-    echo "HAProxy stopped"
-}
-
-stop_motd() {
-    if ! is_running "$MOTD_PID"; then
-        echo "MOTD server not running"
-        cleanup_pid "$MOTD_PID"
-        return 0
-    fi
-    pid=$(cat "$MOTD_PID" 2>/dev/null)
-    kill "$pid" 2>/dev/null || true
-    i=0
-    while is_running "$MOTD_PID" && [ "$i" -lt 5 ]; do
-        sleep 1
-        i=$((i + 1))
-    done
-    if is_running "$MOTD_PID"; then
-        kill -9 "$pid" 2>/dev/null || true
-    fi
-    cleanup_pid "$MOTD_PID"
-    echo "MOTD server stopped"
-}
-
-status_haproxy() {
-    if is_running "$HAPROXY_PID"; then
-        echo "HAProxy running (PID $(cat "$HAPROXY_PID"))"
-    else
-        echo "HAProxy not running"
-        return 1
-    fi
-}
-
-status_motd() {
-    if is_running "$MOTD_PID"; then
-        echo "MOTD server running (PID $(cat "$MOTD_PID"))"
-    else
-        echo "MOTD server not running"
-        return 1
-    fi
-}
-
-start_service() {
-    start_haproxy
-    start_motd
-}
-
-stop_service() {
-    stop_motd
-    stop_haproxy
-}
-
-status_service() {
-    local ret=0
-    status_haproxy || ret=$?
-    status_motd || ret=$?
-    return "$ret"
-}
-
-check_config() {
-    "$HAPROXY_BIN" -c -q -V -f "$HAPROXY_CONFIG"
-}
-
-run_foreground() {
-    "$LUA_BIN" "$MOTD_SCRIPT" &
-    motd_pid=$!
-    trap 'kill "$motd_pid" 2>/dev/null; exit' INT TERM
-    "$HAPROXY_BIN" -q -W -db -f "$HAPROXY_CONFIG"
-    haproxy_exit=$?
-    kill "$motd_pid" 2>/dev/null
-    return "$haproxy_exit"
-}
-
-usage() {
-    cat <<EOF
-Usage: $(basename "$0" 2>/dev/null || echo "haminegate") {start|stop|restart|status|check} [-f|--foreground] [-h|--help]
-
-Commands:
-  start       Start both HAProxy and MOTD server as background services
-  stop        Stop both services
-  restart     Restart (stop then start) both services
-  status      Show running status of both services
-  check       Validate HAProxy configuration syntax
-
-Options:
-  -f, --foreground  Run both services in foreground (Ctrl+C to stop)
-  -h, --help        Show this help message
-EOF
-}
+HAMINEGATE_WRAPPER="${HAMINEGATE_WRAPPER:-/usr/local/bin/haminegate}"
 
 case "${1:-}" in
-    start)
-        start_service
-        ;;
-    stop)
-        stop_service
-        ;;
-    restart)
-        stop_service
-        start_service
-        ;;
-    status)
-        status_service
-        ;;
-    check)
-        check_config
-        ;;
-    -f|--foreground)
-        run_foreground
-        ;;
-    -h|--help)
-        usage
+    start|stop|restart|status|check)
+        [ -x "$HAMINEGATE_WRAPPER" ] || {
+            echo "HAMineGate wrapper not found at $HAMINEGATE_WRAPPER" >&2
+            exit 1
+        }
+        exec "$HAMINEGATE_WRAPPER" "$@"
         ;;
     *)
-        usage
+        echo "Usage: $0 {start|stop|restart|status|check}"
         exit 1
         ;;
 esac

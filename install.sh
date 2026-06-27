@@ -32,7 +32,9 @@ sub()   { printf "  ${C}::${NC} %b\n" "$*"; }
 
 # ---- Defaults ----
 HAPROXY_DIR="${HAPROXY_DIR:-/root/haproxy}"
-INIT_DIR="${INIT_DIR:-/etc/init.d}"
+WRAPPER_DIR="${WRAPPER_DIR:-/usr/local/bin}}"
+SYSTEMD_DIR="${SYSTEMD_DIR:-/etc/systemd/system}"
+INSTALL_SYSTEMD=0
 BRANCH="${BRANCH:-main}"
 BASE_URL="${BASE_URL:-https://raw.githubusercontent.com/QinCai-rui/HAMineGate/$BRANCH}"
 DRY_RUN=0
@@ -53,7 +55,10 @@ ${BOLD}Usage:${NC}
 
 ${BOLD}Flags:${NC}
   --haproxy-dir DIR   Lua scripts & config destination  [default: $HAPROXY_DIR]
-  --init-dir DIR      Init script destination           [default: $INIT_DIR]
+  --wrapper-dir DIR   Wrapper script destination        [default: $WRAPPER_DIR]
+  --init-dir DIR      SysVinit script destination       [default: $INIT_DIR]
+  --systemd-dir DIR   systemd unit destination          [default: $SYSTEMD_DIR]
+  --with-systemd      Also install the systemd unit file
   --branch NAME       Git branch to fetch from          [default: $BRANCH]
   --base-url URL      Full raw base URL (overrides --branch)
   --force             Overwrite all config/data files without asking
@@ -67,15 +72,18 @@ EOF
 # ---- Parse arguments ----
 while [ $# -gt 0 ]; do
     case "$1" in
-        --haproxy-dir) HAPROXY_DIR="$2"; shift ;;
-        --init-dir)    INIT_DIR="$2";    shift ;;
-        --branch)      BRANCH="$2";      shift ;;
-        --base-url)    BASE_URL="$2";    shift ;;
-        --force)       FORCE=1 ;;
-        --yes|-y)      NONINTERACTIVE=1 ;;
-        --dry-run)     DRY_RUN=1 ;;
-        -h|--help)     usage ;;
-        *) err "Unknown option: $1"; usage ;;
+    --haproxy-dir)  HAPROXY_DIR="$2";  shift ;;
+    --wrapper-dir)  WRAPPER_DIR="$2";  shift ;;
+    --init-dir)     INIT_DIR="$2";     shift ;;
+    --systemd-dir)  SYSTEMD_DIR="$2";  shift ;;
+    --with-systemd) INSTALL_SYSTEMD=1 ;;
+    --branch)       BRANCH="$2";       shift ;;
+    --base-url)     BASE_URL="$2";     shift ;;
+    --force)        FORCE=1 ;;
+    --yes|-y)       NONINTERACTIVE=1 ;;
+    --dry-run)      DRY_RUN=1 ;;
+    -h|--help)      usage ;;
+    *) err "Unknown option: $1"; usage ;;
     esac
     shift
 done
@@ -97,7 +105,9 @@ fi
 # ---- Interactive prompts (unless non-interactive or flags set) ----
 HAS_FLAGS=0
 [ "$HAPROXY_DIR" != "/root/haproxy" ] && HAS_FLAGS=1
-[ "$INIT_DIR" != "/etc/init.d" ] && HAS_FLAGS=1
+[ "$WRAPPER_DIR" != "/usr/local/bin" ] && HAS_FLAGS=" ] && HAS_FLAGS=1
+[ "$SYSTEMD_DIR" != "/etc/systemd/system" ] && HAS_FLAGS=1
+[ "$INSTALL_SYSTEMD" = "1" ] && HAS_FLAGS=1
 [ "$FORCE" = "1" ] && HAS_FLAGS=1
 
 if [ "$HAS_FLAGS" = "0" ] && [ "$NONINTERACTIVE" = "0" ]; then
@@ -120,9 +130,19 @@ if [ "$HAS_FLAGS" = "0" ] && [ "$NONINTERACTIVE" = "0" ]; then
         read -r input < /dev/tty || true
         [ -n "$input" ] && HAPROXY_DIR="$input"
 
-        printf "  ${C}::${NC} Init scripts dir           [${G}%s${NC}]: " "$INIT_DIR"
+        printf "  ${C}::${NC} Wrapper script dir        [${G}%s${NC}]: " "$WRAPPER_DIR"
+        read -r input < /dev/tty || true
+        [ -n "$input" ] && WRAPPER_DIR="$input"
+
+        printf "  ${C}::${NC} SysVinit scripts dir       [${G}%s${NC}]: " "$INIT_DIR"
         read -r input < /dev/tty || true
         [ -n "$input" ] && INIT_DIR="$input"
+
+        printf "  ${Y}?${NC} Install systemd unit too?  ${BOLD}[y/N]${NC} "
+        read -r input < /dev/tty || true
+        case "$(printf "%s" "$input" | tr '[:upper:]' '[:lower:]')" in
+            y|yes) INSTALL_SYSTEMD=1 ;;
+        esac
 
         echo
     fi
@@ -138,11 +158,15 @@ FILE_EXISTS_CONFIG=0
 # ---- Mode decisions ----
 MODE_HAPROXY_CFG="overwrite"
 MODE_CONFIG="overwrite"
-MODE_INIT_WRAPPER="overwrite"
+MODE_WRAPPER="overwrite"
+MODE_INIT_SCRIPT="overwrite"
+MODE_SYSTEMD="overwrite"
 
 if [ "$FORCE" = "1" ]; then
     MODE_CONFIG="overwrite"
-    MODE_INIT_WRAPPER="overwrite"
+    MODE_WRAPPER="overwrite"
+    MODE_INIT_SCRIPT="overwrite"
+    MODE_SYSTEMD="overwrite"
 elif [ "$NONINTERACTIVE" = "1" ]; then
     # Non-interactive: preserve existing config, install if missing
     [ "$FILE_EXISTS_CONFIG" = "1" ] && MODE_CONFIG="skip"
@@ -166,11 +190,29 @@ elif [ -c /dev/tty ] 2>/dev/null; then
         esac
     fi
 
-    if [ -f "$INIT_DIR/haminegate" ]; then
-        printf "  ${Y}?${NC} ${INIT_DIR}/haminegate exists. Overwrite? ${BOLD}[Y/n]${NC} "
+    if [ -f "$WRAPPER_DIR/haminegate" ]; then
+        printf "  ${Y}?${NC} ${WRAPPER_DIR}/haminegate exists. Overwrite? ${BOLD}[Y/n]${NC} "
         read -r input < /dev/tty || true
         case "$(printf "%s" "$input" | tr '[:upper:]' '[:lower:]')" in
-            n|no) MODE_INIT_WRAPPER="skip" ;;
+            n|no) MODE_WRAPPER="skip" ;;
+            *) ;;
+        esac
+    fi
+
+    if [ -f "$INIT_DIR/haminegate" ]; then
+        printf "  ${Y}?${NC} ${INIT_DIR}/haminegate (sysvinit) exists. Overwrite? ${BOLD}[Y/n]${NC} "
+        read -r input < /dev/tty || true
+        case "$(printf "%s" "$input" | tr '[:upper:]' '[:lower:]')" in
+            n|no) MODE_INIT_SCRIPT="skip" ;;
+            *) ;;
+        esac
+    fi
+
+    if [ "$INSTALL_SYSTEMD" = "1" ] && [ -f "$SYSTEMD_DIR/haminegate.service" ]; then
+        printf "  ${Y}?${NC} ${SYSTEMD_DIR}/haminegate.service exists. Overwrite? ${BOLD}[Y/n]${NC} "
+        read -r input < /dev/tty || true
+        case "$(printf "%s" "$input" | tr '[:upper:]' '[:lower:]')" in
+            n|no) MODE_SYSTEMD="skip" ;;
             *) ;;
         esac
     fi
@@ -217,11 +259,29 @@ else
 fi
 
 echo
-sub "${BOLD}Wrapper script → ${C}${INIT_DIR}/${NC}"
-if [ "$MODE_INIT_WRAPPER" = "skip" ]; then
+sub "${BOLD}Wrapper → ${C}${WRAPPER_DIR}/${NC}"
+if [ "$MODE_WRAPPER" = "skip" ]; then
     info "haminegate (${Y}skipping${NC})"
 else
     info "haminegate"
+fi
+
+echo
+sub "${BOLD}SysVinit init script → ${C}${INIT_DIR}/${NC}"
+if [ "$MODE_INIT_SCRIPT" = "skip" ]; then
+    info "haminegate (${Y}skipping${NC})"
+else
+    info "haminegate"
+fi
+
+if [ "$INSTALL_SYSTEMD" = "1" ]; then
+    echo
+    sub "${BOLD}systemd unit → ${C}${SYSTEMD_DIR}/${NC}"
+    if [ "$MODE_SYSTEMD" = "skip" ]; then
+        info "haminegate.service (${Y}skipping${NC})"
+    else
+        info "haminegate.service"
+    fi
 fi
 
 echo
@@ -298,10 +358,24 @@ else
     ok "$HAPROXY_DIR/haminegate_cfg.lua"
 fi
 
-title "Installing wrapper script → $INIT_DIR"
+title "Installing wrapper → $WRAPPER_DIR"
+mkdir -p "$WRAPPER_DIR"
+if [ "$MODE_WRAPPER" = "skip" ]; then
+    warn "Skipping haminegate wrapper (keeping existing)"
+else
+    if [ "$LOCAL" = "1" ]; then
+        cp "$REPO_DIR/services/haminegate" "$WRAPPER_DIR/haminegate"
+    else
+        curl -sSfL "$BASE_URL/services/haminegate" -o "$WRAPPER_DIR/haminegate"
+    fi
+    chmod +x "$WRAPPER_DIR/haminegate"
+    ok "$WRAPPER_DIR/haminegate"
+fi
+
+title "Installing SysVinit init script → $INIT_DIR"
 mkdir -p "$INIT_DIR"
-if [ "$MODE_INIT_WRAPPER" = "skip" ]; then
-    warn "Skipping haminegate (keeping existing)"
+if [ "$MODE_INIT_SCRIPT" = "skip" ]; then
+    warn "Skipping sysvinit init script (keeping existing)"
 else
     if [ "$LOCAL" = "1" ]; then
         cp "$REPO_DIR/services/sysvinit/haminegate" "$INIT_DIR/haminegate"
@@ -312,12 +386,27 @@ else
     ok "$INIT_DIR/haminegate"
 fi
 
+if [ "$INSTALL_SYSTEMD" = "1" ]; then
+    title "Installing systemd unit → $SYSTEMD_DIR"
+    mkdir -p "$SYSTEMD_DIR"
+    if [ "$MODE_SYSTEMD" = "skip" ]; then
+        warn "Skipping systemd unit (keeping existing)"
+    else
+        if [ "$LOCAL" = "1" ]; then
+            cp "$REPO_DIR/services/systemd/haminegate.service" "$SYSTEMD_DIR/haminegate.service"
+        else
+            curl -sSfL "$BASE_URL/services/systemd/haminegate.service" -o "$SYSTEMD_DIR/haminegate.service"
+        fi
+        ok "$SYSTEMD_DIR/haminegate.service"
+    fi
+fi
+
 # ---- Substitute paths in installed files if non-default dir ----
 if [ "$HAPROXY_DIR" != "/root/haproxy" ]; then
     title "Updating paths in installed files → $HAPROXY_DIR"
-    if [ -f "$INIT_DIR/haminegate" ]; then
-        sed -i "s|/root/haproxy|$HAPROXY_DIR|g" "$INIT_DIR/haminegate"
-        ok "Patched $INIT_DIR/haminegate"
+    if [ -f "$WRAPPER_DIR/haminegate" ]; then
+        sed -i "s|/root/haproxy|$HAPROXY_DIR|g" "$WRAPPER_DIR/haminegate"
+        ok "Patched $WRAPPER_DIR/haminegate"
     fi
     if [ -f "$HAPROXY_DIR/haproxy.cfg" ]; then
         sed -i "s|/root/haproxy|$HAPROXY_DIR|g" "$HAPROXY_DIR/haproxy.cfg"
@@ -336,10 +425,14 @@ echo
 printf "  ${BOLD}Lua scripts:${NC}   %b\n"  "${C}${HAPROXY_DIR}/*.lua${NC}"
 printf "  ${BOLD}Config:${NC}        %b\n"  "${C}${HAPROXY_DIR}/haminegate_cfg.lua${NC}"
 printf "  ${BOLD}HAProxy cfg:${NC}   %b\n"  "${C}${HAPROXY_DIR}/haproxy.cfg${NC}"
-printf "  ${BOLD}Wrapper:${NC}       %b\n"  "${C}${INIT_DIR}/haminegate${NC}"
+printf "  ${BOLD}Wrapper:${NC}       %b\n"  "${C}${WRAPPER_DIR}/haminegate${NC}"
+printf "  ${BOLD}SysVinit:${NC}      %b\n"  "${C}${INIT_DIR}/haminegate${NC}"
+if [ "$INSTALL_SYSTEMD" = "1" ]; then
+    printf "  ${BOLD}systemd:${NC}       %b\n"  "${C}${SYSTEMD_DIR}/haminegate.service${NC}"
+fi
 echo
 printf "  ${BOLD}Next steps:${NC}\n"
 printf "    ${Y}1.${NC} Edit ${C}${HAPROXY_DIR}/haminegate_cfg.lua${NC} to set your blocked IPs and allowed hostnames\n"
 printf "    ${Y}2.${NC} Edit ${C}${HAPROXY_DIR}/haproxy.cfg${NC} to match your backend\n"
-printf "    ${Y}3.${NC} Start everything: ${C}${INIT_DIR}/haminegate start${NC}\n"
+printf "    ${Y}3.${NC} Start everything: ${C}${WRAPPER_DIR}/haminegate start${NC}\n"
 echo
