@@ -33,10 +33,11 @@ sub()   { printf "  ${C}::${NC} %b\n" "$*"; }
 # ---- Defaults ----
 HAPROXY_DIR="${HAPROXY_DIR:-/root/haproxy}"
 WRAPPER_DIR="${WRAPPER_DIR:-/usr/local/bin}"
+INIT_DIR="${INIT_DIR:-/etc/init.d}"
 SYSTEMD_DIR="${SYSTEMD_DIR:-/etc/systemd/system}"
 INSTALL_SYSTEMD=0
 BRANCH="${BRANCH:-main}"
-BASE_URL="${BASE_URL:-https://raw.githubusercontent.com/QinCai-rui/HAMineGate/$BRANCH}"
+BASE_URL="${BASE_URL:-https://raw.githubusercontent.com/QinCai-rui/HAMineGate/$BRANCH}?$(date +%s)"
 DRY_RUN=0
 FORCE=0
 LOCAL=0
@@ -56,7 +57,7 @@ ${BOLD}Usage:${NC}
 ${BOLD}Flags:${NC}
   --haproxy-dir DIR   Lua scripts & config destination  [default: $HAPROXY_DIR]
   --wrapper-dir DIR   Wrapper script destination        [default: $WRAPPER_DIR]
-  --init-dir DIR      SysVinit script destination       [default: $INIT_DIR]
+  --init-dir DIR      Init script destination           [default: $INIT_DIR]
   --systemd-dir DIR   systemd unit destination          [default: $SYSTEMD_DIR]
   --with-systemd      Also install the systemd unit file
   --branch NAME       Git branch to fetch from          [default: $BRANCH]
@@ -102,6 +103,16 @@ elif [ -f "./src/minecraft_prot.lua" ]; then
     REPO_DIR="$PWD"
 fi
 
+# ---- Detect init system ----
+INIT_TYPE="sysvinit"
+if [ -f /etc/openwrt_release ] || [ -f /sbin/uci ]; then
+    INIT_TYPE="openwrt"
+fi
+
+if command -v systemctl >/dev/null 2>&1; then
+    INSTALL_SYSTEMD=1
+fi
+
 # ---- Interactive prompts (unless non-interactive or flags set) ----
 HAS_FLAGS=0
 [ "$HAPROXY_DIR" != "/root/haproxy" ] && HAS_FLAGS=1
@@ -134,7 +145,7 @@ if [ "$HAS_FLAGS" = "0" ] && [ "$NONINTERACTIVE" = "0" ]; then
         read -r input < /dev/tty || true
         [ -n "$input" ] && WRAPPER_DIR="$input"
 
-        printf "  ${C}::${NC} SysVinit scripts dir       [${G}%s${NC}]: " "$INIT_DIR"
+        printf "  ${C}::${NC} Init scripts dir           [${G}%s${NC}]: " "$INIT_DIR"
         read -r input < /dev/tty || true
         [ -n "$input" ] && INIT_DIR="$input"
 
@@ -200,7 +211,7 @@ elif [ -c /dev/tty ] 2>/dev/null; then
     fi
 
     if [ -f "$INIT_DIR/haminegate" ]; then
-        printf "  ${Y}?${NC} ${INIT_DIR}/haminegate (sysvinit) exists. Overwrite? ${BOLD}[Y/n]${NC} "
+        printf "  ${Y}?${NC} ${INIT_DIR}/haminegate exists. Overwrite? ${BOLD}[Y/n]${NC} "
         read -r input < /dev/tty || true
         case "$(printf "%s" "$input" | tr '[:upper:]' '[:lower:]')" in
             n|no) MODE_INIT_SCRIPT="skip" ;;
@@ -267,7 +278,11 @@ else
 fi
 
 echo
-sub "${BOLD}SysVinit init script → ${C}${INIT_DIR}/${NC}"
+if [ "$INIT_TYPE" = "openwrt" ]; then
+    sub "${BOLD}OpenWrt init script → ${C}${INIT_DIR}/${NC}"
+else
+    sub "${BOLD}SysVinit init script → ${C}${INIT_DIR}/${NC}"
+fi
 if [ "$MODE_INIT_SCRIPT" = "skip" ]; then
     info "haminegate (${Y}skipping${NC})"
 else
@@ -372,15 +387,15 @@ else
     ok "$WRAPPER_DIR/haminegate"
 fi
 
-title "Installing SysVinit init script → $INIT_DIR"
+title "Installing init script → $INIT_DIR"
 mkdir -p "$INIT_DIR"
 if [ "$MODE_INIT_SCRIPT" = "skip" ]; then
-    warn "Skipping sysvinit init script (keeping existing)"
+    warn "Skipping init script (keeping existing)"
 else
     if [ "$LOCAL" = "1" ]; then
-        cp "$REPO_DIR/services/sysvinit/haminegate" "$INIT_DIR/haminegate"
+        cp "$REPO_DIR/services/$INIT_TYPE/haminegate" "$INIT_DIR/haminegate"
     else
-        curl -sSfL "$BASE_URL/services/sysvinit/haminegate" -o "$INIT_DIR/haminegate"
+        curl -sSfL "$BASE_URL/services/$INIT_TYPE/haminegate" -o "$INIT_DIR/haminegate"
     fi
     chmod +x "$INIT_DIR/haminegate"
     ok "$INIT_DIR/haminegate"
@@ -426,7 +441,11 @@ printf "  ${BOLD}Lua scripts:${NC}   %b\n"  "${C}${HAPROXY_DIR}/*.lua${NC}"
 printf "  ${BOLD}Config:${NC}        %b\n"  "${C}${HAPROXY_DIR}/haminegate_cfg.lua${NC}"
 printf "  ${BOLD}HAProxy cfg:${NC}   %b\n"  "${C}${HAPROXY_DIR}/haproxy.cfg${NC}"
 printf "  ${BOLD}Wrapper:${NC}       %b\n"  "${C}${WRAPPER_DIR}/haminegate${NC}"
-printf "  ${BOLD}SysVinit:${NC}      %b\n"  "${C}${INIT_DIR}/haminegate${NC}"
+if [ "$INIT_TYPE" = "openwrt" ]; then
+    printf "  ${BOLD}OpenWrt init:${NC}  %b\n"  "${C}${INIT_DIR}/haminegate${NC}"
+else
+    printf "  ${BOLD}SysVinit:${NC}      %b\n"  "${C}${INIT_DIR}/haminegate${NC}"
+fi
 if [ "$INSTALL_SYSTEMD" = "1" ]; then
     printf "  ${BOLD}systemd:${NC}       %b\n"  "${C}${SYSTEMD_DIR}/haminegate.service${NC}"
 fi
