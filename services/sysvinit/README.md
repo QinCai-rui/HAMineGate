@@ -1,25 +1,43 @@
-# SysVinit service files
+# SysVinit service file
 
-`haminegate` is a unified wrapper script that manages both HAProxy and the MOTD fallback server.
+This init script runs the standalone `haminegate` wrapper at
+`/usr/local/bin/haminegate`.
+It follows the LSB init script convention and works on any system with a sysv-compatible init.
 
-Place it in `/etc/init.d/` or `/usr/local/bin/` and make executable:
+## Installation
+
+Place `haminegate` (the wrapper) in `/usr/local/bin/` and make executable:
 
 ```bash
-    chmod +x haminegate
+chmod +x /usr/local/bin/haminegate
 ```
 
-Then use:
+Place the init script in `/etc/init.d/` and make executable:
 
 ```bash
-    haminegate start|stop|restart|status|check   # background service mode
-    haminegate -f|--foreground                    # foreground (Ctrl+C to stop)
+chmod +x /etc/init.d/haminegate
 ```
 
-In background mode, process PIDs are tracked in `/var/run/haproxy.pid` and
-`/var/run/motd-fallback.pid`.
-
-Override the HAProxy scripts directory with `HAPROXY_DIR`:
+Register with the init system (if needed):
 
 ```bash
-    HAPROXY_DIR=/etc/haproxy haminegate start
+# Debian
+update-rc.d haminegate defaults
+
+# RHEL
+chkconfig --add haminegate
+```
+
+## Usage
+
+```bash
+service haminegate start|stop|restart|status|check
+```
+
+## Overrides
+
+Override the wrapper path by setting `HAMINEGATE_WRAPPER`:
+
+```bash
+HAMINEGATE_WRAPPER=/opt/bin/haminegate service haminegate start
 ```
