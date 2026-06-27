@@ -260,7 +260,6 @@ for f in minecraft_prot.lua minecraft_prot_util.lua minecraft_prot_policy.lua mi
         curl -sSfL "$BASE_URL/src/$f" -o "$HAPROXY_DIR/$f"
     fi
     ok "$HAPROXY_DIR/$f"
-    sdf sf
 done
 
 title "Installing HAProxy config → $HAPROXY_DIR"
