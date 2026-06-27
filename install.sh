@@ -105,7 +105,7 @@ fi
 # ---- Interactive prompts (unless non-interactive or flags set) ----
 HAS_FLAGS=0
 [ "$HAPROXY_DIR" != "/root/haproxy" ] && HAS_FLAGS=1
-[ "$WRAPPER_DIR" != "/usr/local/bin" ] && HAS_FLAGS=" ] && HAS_FLAGS=1
+[ "$WRAPPER_DIR" != "/usr/local/bin" ] && HAS_FLAGS=1
 [ "$SYSTEMD_DIR" != "/etc/systemd/system" ] && HAS_FLAGS=1
 [ "$INSTALL_SYSTEMD" = "1" ] && HAS_FLAGS=1
 [ "$FORCE" = "1" ] && HAS_FLAGS=1
