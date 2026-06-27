@@ -32,7 +32,7 @@ sub()   { printf "  ${C}::${NC} %b\n" "$*"; }
 
 # ---- Defaults ----
 HAPROXY_DIR="${HAPROXY_DIR:-/root/haproxy}"
-WRAPPER_DIR="${WRAPPER_DIR:-/usr/local/bin}}"
+WRAPPER_DIR="${WRAPPER_DIR:-/usr/local/bin}"
 SYSTEMD_DIR="${SYSTEMD_DIR:-/etc/systemd/system}"
 INSTALL_SYSTEMD=0
 BRANCH="${BRANCH:-main}"
