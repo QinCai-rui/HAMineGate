@@ -55,6 +55,7 @@ math.randomseed(os.time())
 local HOST = config.listen_host
 local PORT = config.listen_port
 local ENABLE_LOGGING = true
+local DAEMON_MODE = (config.daemon ~= false)
 local LOG_STATUS_REQUESTS = (config.log_status_requests ~= false)
 local LOG_LOGIN_ATTEMPTS = (config.log_login_attempts ~= false)
 local LOG_PATH = config.log_path
@@ -257,7 +258,9 @@ local function write_log(line)
         file:close()
     end
 
-    print(line)
+    if not DAEMON_MODE then
+        print(line)
+    end
 end
 
 local function log_status_request(peer_ip, peer_port, proto, host)
@@ -416,7 +419,9 @@ local function handle_client(client)
 end
 
 local server = assert(socket.bind(HOST, PORT))
-print("Fake MOTD server running on " .. HOST .. ":" .. PORT)
+if not DAEMON_MODE then
+    print("Fake MOTD server running on " .. HOST .. ":" .. PORT)
+end
 
 -- Each connection is processed *SYNCHRONOUSLY*. TODO
 while true 

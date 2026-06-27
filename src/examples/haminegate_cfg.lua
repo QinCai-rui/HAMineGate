@@ -13,6 +13,10 @@ local config = {
     -- Log file path (motd_server.lua)
     log_path = "/root/motd_server.log",
 
+    -- Daemon mode: suppress stdout logging (logs still go to log_path)
+    -- Set to false when running interactively for debugging
+    daemon = true,
+
     -- Log verbosity
     log_status_requests = true,
     log_login_attempts = true,
