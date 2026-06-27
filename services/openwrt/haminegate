@@ -4,28 +4,34 @@ START=99
 STOP=80
 USE_PROCD=1
 
-HAMINEGATE_WRAPPER="${HAMINEGATE_WRAPPER:-/usr/local/bin/haminegate}"
+HAPROXY_BIN="${HAPROXY_BIN:-/usr/sbin/haproxy}"
+HAPROXY_DIR="${HAPROXY_DIR:-/root/haproxy}"
+LUA_BIN="${LUA_BIN:-/usr/bin/lua}"
+
+HAPROXY_CONFIG="$HAPROXY_DIR/haproxy.cfg"
+MOTD_SCRIPT="$HAPROXY_DIR/motd_server.lua"
 
 start_service() {
-    "$HAMINEGATE_WRAPPER" start
-}
+    procd_open_instance "haproxy"
+    procd_set_param command "$HAPROXY_BIN" -db -f "$HAPROXY_CONFIG"
+    procd_set_param respawn
+    procd_close_instance
 
-stop_service() {
-    "$HAMINEGATE_WRAPPER" stop
+    procd_open_instance "motd"
+    procd_set_param command "$LUA_BIN" "$MOTD_SCRIPT"
+    procd_set_param stdout 1
+    procd_set_param stderr 1
+    procd_set_param respawn
+    procd_close_instance
 }
 
 service_triggers() {
     procd_add_reload_trigger "haminegate_cfg.lua"
 }
 
-EXTRA_COMMANDS="status check"
-EXTRA_HELP="  status  Show running status of both services
-  check   Validate HAProxy configuration syntax"
-
-status() {
-    "$HAMINEGATE_WRAPPER" status
-}
+EXTRA_COMMANDS="check"
+EXTRA_HELP="  check   Validate HAProxy configuration syntax"
 
 check() {
-    "$HAMINEGATE_WRAPPER" check
+    "$HAPROXY_BIN" -c -q -V -f "$HAPROXY_CONFIG"
 }
