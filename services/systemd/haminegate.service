@@ -1,14 +1,16 @@
 [Unit]
-Description=HAMineGate - Minecraft proxy with MOTD fallback
+Description=HAMineGate - Minecraft proxy (HAProxy)
 Documentation=https://github.com/QinCai-rui/HAMineGate
 After=network.target
+Wants=haminegate-motd.service
 
 [Service]
-Type=oneshot
-RemainAfterExit=yes
-ExecStart=/usr/local/bin/haminegate start
-ExecStop=/usr/local/bin/haminegate stop
-ExecReload=/usr/local/bin/haminegate restart
+Type=forking
+PIDFile=/var/run/haproxy.pid
+ExecStart=/usr/sbin/haproxy -D -p /var/run/haproxy.pid -f /root/haproxy/haproxy.cfg
+ExecReload=/usr/sbin/haproxy -D -p /var/run/haproxy.pid -f /root/haproxy/haproxy.cfg -sf $MAINPID
+ExecStop=/bin/kill -SIGTERM $MAINPID
+Restart=on-failure
 
 [Install]
 WantedBy=multi-user.target

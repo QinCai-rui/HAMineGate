@@ -219,13 +219,17 @@ elif [ -c /dev/tty ] 2>/dev/null; then
         esac
     fi
 
-    if [ "$INSTALL_SYSTEMD" = "1" ] && [ -f "$SYSTEMD_DIR/haminegate.service" ]; then
-        printf "  ${Y}?${NC} ${SYSTEMD_DIR}/haminegate.service exists. Overwrite? ${BOLD}[Y/n]${NC} "
-        read -r input < /dev/tty || true
-        case "$(printf "%s" "$input" | tr '[:upper:]' '[:lower:]')" in
-            n|no) MODE_SYSTEMD="skip" ;;
-            *) ;;
-        esac
+    if [ "$INSTALL_SYSTEMD" = "1" ]; then
+        for sf in haminegate.service haminegate-motd.service; do
+            if [ -f "$SYSTEMD_DIR/$sf" ]; then
+                printf "  ${Y}?${NC} ${SYSTEMD_DIR}/$sf exists. Overwrite? ${BOLD}[Y/n]${NC} "
+                read -r input < /dev/tty || true
+                case "$(printf "%s" "$input" | tr '[:upper:]' '[:lower:]')" in
+                    n|no) MODE_SYSTEMD="skip" ;;
+                    *)    MODE_SYSTEMD="overwrite" ;;
+                esac
+            fi
+        done
     fi
     echo
 fi
@@ -291,11 +295,13 @@ fi
 
 if [ "$INSTALL_SYSTEMD" = "1" ]; then
     echo
-    sub "${BOLD}systemd unit → ${C}${SYSTEMD_DIR}/${NC}"
+    sub "${BOLD}systemd units → ${C}${SYSTEMD_DIR}/${NC}"
     if [ "$MODE_SYSTEMD" = "skip" ]; then
         info "haminegate.service (${Y}skipping${NC})"
+        info "haminegate-motd.service (${Y}skipping${NC})"
     else
         info "haminegate.service"
+        info "haminegate-motd.service"
     fi
 fi
 
@@ -402,17 +408,19 @@ else
 fi
 
 if [ "$INSTALL_SYSTEMD" = "1" ]; then
-    title "Installing systemd unit → $SYSTEMD_DIR"
+    title "Installing systemd units → $SYSTEMD_DIR"
     mkdir -p "$SYSTEMD_DIR"
     if [ "$MODE_SYSTEMD" = "skip" ]; then
-        warn "Skipping systemd unit (keeping existing)"
+        warn "Skipping systemd units (keeping existing)"
     else
-        if [ "$LOCAL" = "1" ]; then
-            cp "$REPO_DIR/services/systemd/haminegate.service" "$SYSTEMD_DIR/haminegate.service"
-        else
-            curl -sSfL "$BASE_URL/services/systemd/haminegate.service" -o "$SYSTEMD_DIR/haminegate.service"
-        fi
-        ok "$SYSTEMD_DIR/haminegate.service"
+        for sf in haminegate.service haminegate-motd.service; do
+            if [ "$LOCAL" = "1" ]; then
+                cp "$REPO_DIR/services/systemd/$sf" "$SYSTEMD_DIR/$sf"
+            else
+                curl -sSfL "$BASE_URL/services/systemd/$sf" -o "$SYSTEMD_DIR/$sf"
+            fi
+            ok "$SYSTEMD_DIR/$sf"
+        done
     fi
 fi
 
@@ -427,6 +435,12 @@ if [ "$HAPROXY_DIR" != "/root/haproxy" ]; then
         sed -i "s|/root/haproxy|$HAPROXY_DIR|g" "$HAPROXY_DIR/haproxy.cfg"
         ok "Patched $HAPROXY_DIR/haproxy.cfg"
     fi
+    for sf in haminegate.service haminegate-motd.service; do
+        if [ -f "$SYSTEMD_DIR/$sf" ]; then
+            sed -i "s|/root/haproxy|$HAPROXY_DIR|g" "$SYSTEMD_DIR/$sf"
+            ok "Patched $SYSTEMD_DIR/$sf"
+        fi
+    done
 fi
 
 # =============================================================================
@@ -448,10 +462,11 @@ else
 fi
 if [ "$INSTALL_SYSTEMD" = "1" ]; then
     printf "  ${BOLD}systemd:${NC}       %b\n"  "${C}${SYSTEMD_DIR}/haminegate.service${NC}"
+    printf "  ${BOLD}systemd:${NC}       %b\n"  "${C}${SYSTEMD_DIR}/haminegate-motd.service${NC}"
 fi
 echo
 printf "  ${BOLD}Next steps:${NC}\n"
 printf "    ${Y}1.${NC} Edit ${C}${HAPROXY_DIR}/haminegate_cfg.lua${NC} to set your blocked IPs and allowed hostnames\n"
 printf "    ${Y}2.${NC} Edit ${C}${HAPROXY_DIR}/haproxy.cfg${NC} to match your backend\n"
-printf "    ${Y}3.${NC} Start everything: ${C}${WRAPPER_DIR}/haminegate start${NC}\n"
+printf "    ${Y}3.${NC} Start everything: ${C}systemctl start haminegate.service${NC}\n"
 echo

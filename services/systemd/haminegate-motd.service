@@ -1,0 +1,13 @@
+[Unit]
+Description=HAMineGate - MOTD fallback server
+Documentation=https://github.com/QinCai-rui/HAMineGate
+After=network.target
+PartOf=haminegate.service
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/lua /root/haproxy/motd_server.lua
+Restart=on-failure
+
+[Install]
+WantedBy=haminegate.service

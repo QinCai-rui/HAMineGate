@@ -3,8 +3,6 @@
 # Provides:          haminegate
 # Required-Start:    $network $local_fs $remote_fs
 # Required-Stop:     $network $local_fs $remote_fs
-# Should-Start:
-# Should-Stop:
 # Default-Start:     2 3 4 5
 # Default-Stop:      0 1 6
 # Short-Description: HAMineGate - Minecraft proxy with MOTD fallback
@@ -12,16 +10,107 @@
 #                    for Minecraft server proxy/gatekeeping.
 ### END INIT INFO
 
-HAMINEGATE_WRAPPER="${HAMINEGATE_WRAPPER:-/usr/local/bin/haminegate}"
+HAPROXY_DIR="${HAPROXY_DIR:-/root/haproxy}"
+HAPROXY_BIN="${HAPROXY_BIN:-/usr/sbin/haproxy}"
+LUA_BIN="${LUA_BIN:-/usr/bin/lua}"
+
+HAPROXY_PID="${HAPROXY_PID:-/var/run/haproxy.pid}"
+MOTD_PID="${MOTD_PID:-/var/run/motd-fallback.pid}"
+MOTD_LOG="${MOTD_LOG:-/var/log/motd-server.log}"
+
+HAPROXY_CONFIG="$HAPROXY_DIR/haproxy.cfg"
+MOTD_SCRIPT="$HAPROXY_DIR/motd_server.lua"
+
+is_running() {
+    [ -f "$1" ] && kill -0 "$(cat "$1" 2>/dev/null)" 2>/dev/null
+}
+
+start() {
+    echo -n "Starting HAMineGate:"
+
+    if is_running "$HAPROXY_PID"; then
+        echo -n " HAProxy (already running)"
+    else
+        "$HAPROXY_BIN" -D -p "$HAPROXY_PID" -f "$HAPROXY_CONFIG"
+        echo -n " HAProxy"
+    fi
+
+    if is_running "$MOTD_PID"; then
+        echo -n " MOTD (already running)"
+    else
+        "$LUA_BIN" "$MOTD_SCRIPT" >> "$MOTD_LOG" 2>&1 &
+        echo "$!" > "$MOTD_PID"
+        echo -n " MOTD"
+    fi
+
+    echo "."
+}
+
+stop() {
+    echo -n "Stopping HAMineGate:"
+
+    if is_running "$MOTD_PID"; then
+        pid=$(cat "$MOTD_PID" 2>/dev/null)
+        kill "$pid" 2>/dev/null || true
+        i=0
+        while is_running "$MOTD_PID" && [ "$i" -lt 5 ]; do
+            sleep 1; i=$((i + 1))
+        done
+        if is_running "$MOTD_PID"; then
+            kill -9 "$pid" 2>/dev/null || true
+        fi
+        rm -f "$MOTD_PID"
+        echo -n " MOTD"
+    else
+        rm -f "$MOTD_PID"
+    fi
+
+    if is_running "$HAPROXY_PID"; then
+        pid=$(cat "$HAPROXY_PID" 2>/dev/null)
+        kill "$pid" 2>/dev/null || true
+        i=0
+        while is_running "$HAPROXY_PID" && [ "$i" -lt 10 ]; do
+            sleep 1; i=$((i + 1))
+        done
+        if is_running "$HAPROXY_PID"; then
+            kill -9 "$pid" 2>/dev/null || true
+        fi
+        rm -f "$HAPROXY_PID"
+        echo -n " HAProxy"
+    else
+        rm -f "$HAPROXY_PID"
+    fi
+
+    echo "."
+}
+
+status() {
+    local ret=0
+    if is_running "$HAPROXY_PID"; then
+        echo "  HAProxy running (PID $(cat "$HAPROXY_PID"))"
+    else
+        echo "  HAProxy not running"
+        ret=1
+    fi
+    if is_running "$MOTD_PID"; then
+        echo "  MOTD server running (PID $(cat "$MOTD_PID"))"
+    else
+        echo "  MOTD server not running"
+        ret=1
+    fi
+    return "$ret"
+}
+
+check() {
+    "$HAPROXY_BIN" -c -q -V -f "$HAPROXY_CONFIG"
+}
 
 case "${1:-}" in
-    start|stop|restart|status|check)
-        [ -x "$HAMINEGATE_WRAPPER" ] || {
-            echo "HAMineGate wrapper not found at $HAMINEGATE_WRAPPER" >&2
-            exit 1
-        }
-        exec "$HAMINEGATE_WRAPPER" "$@"
-        ;;
+    start)   start ;;
+    stop)    stop ;;
+    restart) stop; start ;;
+    status)  status ;;
+    check)   check ;;
     *)
         echo "Usage: $0 {start|stop|restart|status|check}"
         exit 1
