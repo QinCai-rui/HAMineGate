@@ -7,8 +7,8 @@ set -e
 #  Requires only: curl, sh (POSIX)
 #
 #  Usage:
-#    curl -sSfL https://raw.githubusercontent.com/QinCai-rui/HAMineGate/main/install.sh | bash
-#    curl ... | bash -s -- --haproxy-dir /etc/haproxy
+#    curl -sSfL https://raw.githubusercontent.com/QinCai-rui/HAMineGate/main/install.sh | sh
+#    curl ... | sh -s -- --haproxy-dir /etc/haproxy
 #    HAPROXY_DIR=/etc/haproxy ./install.sh
 #
 #  Flags override prompts. When run interactively you'll be asked for
@@ -47,8 +47,8 @@ usage() {
 ${BOLD}HAMineGate Installer${NC}
 
 ${BOLD}Usage:${NC}
-  ${C}curl -sSfL https://raw.githubusercontent.com/QinCai-rui/HAMineGate/main/install.sh | bash${NC}
-  ${C}curl ... | bash -s -- --haproxy-dir /etc/haproxy --force${NC}
+  ${C}curl -sSfL https://raw.githubusercontent.com/QinCai-rui/HAMineGate/main/install.sh | sh${NC}
+  ${C}curl ... | sh -s -- --haproxy-dir /etc/haproxy --force${NC}
   ${C}HAPROXY_DIR=/etc/haproxy ./install.sh${NC}
 
 ${BOLD}Flags:${NC}
